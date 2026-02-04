@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -49,6 +50,7 @@ type tunnel struct {
 	logs       []string
 	active     bool
 	logChan    chan string
+	logMutex   sync.Mutex
 }
 
 // Implement list.Item interface for tunnel
@@ -175,8 +177,16 @@ type logMsg struct {
 
 type connectingMsg struct{}
 
+type tickMsg time.Time
+
 func (m model) Init() tea.Cmd {
-	return m.spinner.Tick
+	return tea.Batch(m.spinner.Tick, tickCmd())
+}
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 func waitForConnection() tea.Cmd {
@@ -189,6 +199,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	
 	switch msg := msg.(type) {
+	case tickMsg:
+		// Refresh UI periodically
+		return m, tickCmd()
+		
 	case connectingMsg:
 		if m.view == viewNewTunnel && m.step == stepConnecting {
 			return m.finalizeTunnel()
@@ -200,23 +214,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 		
 	case logMsg:
-		// Update logs for the specific tunnel
-		for i := range m.tunnels {
-			if m.tunnels[i].id == msg.tunnelID {
-				if msg.line != "" {
-					m.tunnels[i].logs = append(m.tunnels[i].logs, msg.line)
-					// Keep only last 100 lines
-					if len(m.tunnels[i].logs) > 100 {
-						m.tunnels[i].logs = m.tunnels[i].logs[1:]
-					}
-					// Continue listening only when we got a real log
-					if m.tunnels[i].active && m.tunnels[i].logChan != nil {
-						cmds = append(cmds, m.waitForLog(msg.tunnelID))
-					}
-				}
-				break
-			}
-		}
+		// Logs are now updated directly by goroutine, this is just for compatibility
+		break
 		
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -469,8 +468,6 @@ func (m *model) finalizeTunnel() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	logChan := make(chan string, 100)
-	
 	// Start the command
 	if err := cmd.Start(); err != nil {
 		return m, nil
@@ -488,17 +485,7 @@ func (m *model) finalizeTunnel() (tea.Model, tea.Cmd) {
 		cmd:        cmd,
 		active:     true,
 		logs:       []string{fmt.Sprintf("[%s] Tunnel started", time.Now().Format("15:04:05"))},
-		logChan:    logChan,
 	}
-
-	// Start goroutine to read logs
-	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			logChan <- scanner.Text()
-		}
-		close(logChan)
-	}()
 
 	m.tunnels = append(m.tunnels, t)
 	m.nextTunnelID++
@@ -506,32 +493,23 @@ func (m *model) finalizeTunnel() (tea.Model, tea.Cmd) {
 	m.selectedTunnel = len(m.tunnels) - 1
 	m.updateTunnelList()
 
-	return m, m.waitForLog(tunnelID)
-}
-
-
-func (m *model) waitForLog(tunnelID int) tea.Cmd {
-	return func() tea.Msg {
-		// Find the tunnel
-		for i := range m.tunnels {
-			if m.tunnels[i].id == tunnelID && m.tunnels[i].logChan != nil {
-				select {
-				case line, ok := <-m.tunnels[i].logChan:
-					if !ok {
-						// Channel closed
-						return nil
-					}
-					if line != "" {
-						return logMsg{tunnelID: tunnelID, line: fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), line)}
-					}
-				case <-time.After(2 * time.Second):
-					// No logs for 2 seconds, stop polling
-					return nil
+	// Start goroutine to read logs in background
+	go func(tun *tunnel) {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line != "" {
+				tun.logMutex.Lock()
+				tun.logs = append(tun.logs, fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), line))
+				if len(tun.logs) > 100 {
+					tun.logs = tun.logs[1:]
 				}
+				tun.logMutex.Unlock()
 			}
 		}
-		return nil
-	}
+	}(&m.tunnels[len(m.tunnels)-1])
+
+	return m, nil
 }
 
 func (m model) View() string {
@@ -679,21 +657,27 @@ func (m model) renderBody(width, height int) string {
 	
 	markdown += "## Logs\n\n"
 	
-	if len(t.logs) > 0 {
+	// Read logs with mutex
+	t.logMutex.Lock()
+	logsCopy := make([]string, len(t.logs))
+	copy(logsCopy, t.logs)
+	t.logMutex.Unlock()
+	
+	if len(logsCopy) > 0 {
 		// Show last logs that fit in the available space
 		availableLines := height - 15
 		if availableLines < 1 {
 			availableLines = 1
 		}
 		
-		start := len(t.logs) - availableLines
+		start := len(logsCopy) - availableLines
 		if start < 0 {
 			start = 0
 		}
 		
 		markdown += "```\n"
-		for i := start; i < len(t.logs); i++ {
-			markdown += t.logs[i] + "\n"
+		for i := start; i < len(logsCopy); i++ {
+			markdown += logsCopy[i] + "\n"
 		}
 		markdown += "```\n"
 	} else {
