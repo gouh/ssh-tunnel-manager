@@ -1,6 +1,6 @@
 # Binaries
-ssh-tunnel
-ssh-tunnel-*
+ssh-tunnel-manager
+ssh-tunnel-manager-*
 *.exe
 *.exe~
 *.dll

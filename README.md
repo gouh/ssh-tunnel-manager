@@ -62,23 +62,23 @@ Download the latest release for your platform:
 
 **Linux (x64)**
 ```bash
-wget https://github.com/gouh/ssh-tunnel-manager/releases/latest/download/ssh-tunnel-linux-amd64
-chmod +x ssh-tunnel-linux-amd64
-sudo mv ssh-tunnel-linux-amd64 /usr/local/bin/ssh-tunnel
+wget https://github.com/gouh/ssh-tunnel-manager/releases/latest/download/ssh-tunnel-manager-linux-amd64
+chmod +x ssh-tunnel-manager-linux-amd64
+sudo mv ssh-tunnel-manager-linux-amd64 /usr/local/bin/ssh-tunnel-manager
 ```
 
 **macOS (Intel)**
 ```bash
-wget https://github.com/gouh/ssh-tunnel-manager/releases/latest/download/ssh-tunnel-darwin-amd64
-chmod +x ssh-tunnel-darwin-amd64
-sudo mv ssh-tunnel-darwin-amd64 /usr/local/bin/ssh-tunnel
+wget https://github.com/gouh/ssh-tunnel-manager/releases/latest/download/ssh-tunnel-manager-darwin-amd64
+chmod +x ssh-tunnel-manager-darwin-amd64
+sudo mv ssh-tunnel-manager-darwin-amd64 /usr/local/bin/ssh-tunnel-manager
 ```
 
 **macOS (Apple Silicon)**
 ```bash
-wget https://github.com/gouh/ssh-tunnel-manager/releases/latest/download/ssh-tunnel-darwin-arm64
-chmod +x ssh-tunnel-darwin-arm64
-sudo mv ssh-tunnel-darwin-arm64 /usr/local/bin/ssh-tunnel
+wget https://github.com/gouh/ssh-tunnel-manager/releases/latest/download/ssh-tunnel-manager-darwin-arm64
+chmod +x ssh-tunnel-manager-darwin-arm64
+sudo mv ssh-tunnel-manager-darwin-arm64 /usr/local/bin/ssh-tunnel-manager
 ```
 
 ### Prerequisites
@@ -96,10 +96,10 @@ git clone https://github.com/gouh/ssh-tunnel-manager.git
 cd ssh-tunnel-manager
 
 # Build the binary
-go build -o ssh-tunnel
+go build -o ssh-tunnel-manager
 
 # Install to system (optional)
-sudo cp ssh-tunnel /usr/local/bin/
+sudo cp ssh-tunnel-manager /usr/local/bin/
 ```
 
 ## Usage
@@ -107,7 +107,7 @@ sudo cp ssh-tunnel /usr/local/bin/
 ### Starting the application
 
 ```bash
-ssh-tunnel
+ssh-tunnel-manager
 ```
 
 ### Keyboard shortcuts

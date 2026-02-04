@@ -8,7 +8,7 @@ set -e
 VERSION="0.0.1"
 REPO="gouh/ssh-tunnel-manager"
 INSTALL_DIR="/usr/local/bin"
-BINARY_NAME="ssh-tunnel"
+BINARY_NAME="ssh-tunnel-manager"
 
 # Detect OS and Architecture
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -40,7 +40,7 @@ case "$ARCH" in
         ;;
 esac
 
-DOWNLOAD_FILE="ssh-tunnel-${OS_NAME}-${ARCH_NAME}"
+DOWNLOAD_FILE="ssh-tunnel-manager-${OS_NAME}-${ARCH_NAME}"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${DOWNLOAD_FILE}"
 
 echo "🚀 Installing SSH Tunnel Manager v${VERSION}"
@@ -73,4 +73,4 @@ fi
 echo ""
 echo "✅ Installation complete!"
 echo ""
-echo "Run 'ssh-tunnel' to start the application"
+echo "Run 'ssh-tunnel-manager' to start the application"
