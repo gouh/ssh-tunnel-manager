@@ -111,6 +111,9 @@ type model struct {
 	width        int
 	height       int
 	program      *tea.Program
+	
+	// Cache for glamour renderer
+	glamourRenderer *glamour.TermRenderer
 }
 
 var (
@@ -181,13 +184,20 @@ func initialModel() model {
 		Bold(true).
 		Padding(0, 0, 1, 0)
 	
+	// Initialize glamour renderer once
+	renderer, _ := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(80),
+	)
+	
 	return model{
-		view:          viewMain,
-		hosts:         getSSHHosts(),
-		selectedPanel: 0,
-		nextTunnelID:  1,
-		spinner:       s,
-		tunnelList:    tunnelList,
+		view:            viewMain,
+		hosts:           getSSHHosts(),
+		selectedPanel:   0,
+		nextTunnelID:    1,
+		spinner:         s,
+		tunnelList:      tunnelList,
+		glamourRenderer: renderer,
 	}
 }
 
@@ -205,7 +215,7 @@ func (m model) Init() tea.Cmd {
 }
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Millisecond*250, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -669,20 +679,22 @@ func (m model) renderBody(width, height int) string {
 
 	t := m.tunnels[m.selectedTunnel]
 	
-	// Create markdown content
-	markdown := fmt.Sprintf("# %s\n\n", t.tag)
-	markdown += fmt.Sprintf("**Host:** `%s`  \n", t.host)
-	markdown += fmt.Sprintf("**Local Port:** `%s`  \n", t.localPort)
-	markdown += fmt.Sprintf("**Remote Port:** `%s`  \n", t.remotePort)
-	markdown += fmt.Sprintf("**Verbose:** %v  \n", t.verbose)
+	// Simple text rendering without glamour for performance
+	var content strings.Builder
+	
+	content.WriteString(successStyle.Render(fmt.Sprintf("▶ %s", t.tag)) + "\n\n")
+	content.WriteString(fmt.Sprintf("Host: %s\n", selectedStyle.Render(t.host)))
+	content.WriteString(fmt.Sprintf("Local Port: %s\n", selectedStyle.Render(t.localPort)))
+	content.WriteString(fmt.Sprintf("Remote Port: %s\n", selectedStyle.Render(t.remotePort)))
 	
 	if t.active {
-		markdown += "**Status:** 🟢 ACTIVE\n\n"
+		content.WriteString(fmt.Sprintf("Status: %s\n\n", activeStyle.Render("🟢 ACTIVE")))
 	} else {
-		markdown += "**Status:** 🔴 INACTIVE\n\n"
+		content.WriteString(fmt.Sprintf("Status: %s\n\n", inactiveStyle.Render("🔴 INACTIVE")))
 	}
 	
-	markdown += "## Logs\n\n"
+	content.WriteString(highlightStyle.Render("Logs:") + "\n")
+	content.WriteString(strings.Repeat("─", width-6) + "\n")
 	
 	// Navigator reads logs from the selected tunnel's goroutine
 	// Thread-safe read with mutex
@@ -692,8 +704,7 @@ func (m model) renderBody(width, height int) string {
 	t.logMutex.Unlock()
 	
 	if len(logsCopy) > 0 {
-		// Show last logs that fit in the available space
-		availableLines := height - 15
+		availableLines := height - 12
 		if availableLines < 1 {
 			availableLines = 1
 		}
@@ -703,31 +714,14 @@ func (m model) renderBody(width, height int) string {
 			start = 0
 		}
 		
-		markdown += "```\n"
 		for i := start; i < len(logsCopy); i++ {
-			markdown += logsCopy[i] + "\n"
+			content.WriteString(subtleStyle.Render(logsCopy[i]) + "\n")
 		}
-		markdown += "```\n"
 	} else {
-		markdown += "_No logs yet..._\n"
+		content.WriteString(subtleStyle.Render("No logs yet...") + "\n")
 	}
 	
-	// Render with glamour
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(width-6),
-	)
-	
-	if err != nil {
-		return style.Render("Error rendering content")
-	}
-	
-	rendered, err := renderer.Render(markdown)
-	if err != nil {
-		return style.Render(markdown)
-	}
-	
-	return style.Render(rendered)
+	return style.Render(content.String())
 }
 
 func (m model) renderFooter(width int) string {
