@@ -46,27 +46,32 @@ type model struct {
 }
 
 var (
-	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")).MarginBottom(1)
+	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
 	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
 	successStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("46")).Bold(true)
 	warningStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Bold(true)
 	selectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true)
-	boxStyle      = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("63")).Padding(1, 2)
+	boxStyle      = lipgloss.NewStyle().
+			Border(lipgloss.DoubleBorder()).
+			BorderForeground(lipgloss.Color("63")).
+			Padding(1, 3).
+			Width(60)
+	subtleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
 
 const banner = `
-╔═══════════════════════════════════════════╗
-║                                           ║
-║      🚀 SSH TUNNEL MANAGER 🚀            ║
-║                                           ║
-║      Secure tunnels made easy            ║
-║                                           ║
-╚═══════════════════════════════════════════╝
+  ╔═══════════════════════════════════════════════╗
+  ║                                               ║
+  ║         🚀  SSH TUNNEL MANAGER  🚀           ║
+  ║                                               ║
+  ║           Secure tunnels made easy            ║
+  ║                                               ║
+  ╚═══════════════════════════════════════════════╝
 `
 
 func initialModel() model {
 	s := spinner.New()
-	s.Spinner = spinner.Dot
+	s.Spinner = spinner.Points
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	
 	return model{
@@ -208,21 +213,21 @@ func (m model) handleEnter() (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	var s string
 
-	s += lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Render(banner) + "\n"
+	s += titleStyle.Render(banner) + "\n\n"
 
 	switch m.step {
 	case stepCheckVPN:
-		content := fmt.Sprintf("%s Checking VPN status...", m.spinner.View())
+		content := fmt.Sprintf("%s  Checking VPN status...", m.spinner.View())
 		s += boxStyle.Render(content)
 
 	case stepVPNPrompt:
 		content := warningStyle.Render("⚠️  VPN is not running") + "\n\n"
-		content += "Start VPN? (y/n): "
+		content += "Start VPN? " + subtleStyle.Render("(y/n)")
 		s += boxStyle.Render(content)
 
 	case stepStartingVPN:
-		content := fmt.Sprintf("%s Starting VPN...\n\n", m.spinner.View())
-		content += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("This may take a few seconds...")
+		content := fmt.Sprintf("%s  Starting VPN...\n\n", m.spinner.View())
+		content += subtleStyle.Render("This may take a few seconds...")
 		s += boxStyle.Render(content)
 
 	case stepHost:
@@ -230,24 +235,22 @@ func (m model) View() string {
 		content += lipgloss.NewStyle().Bold(true).Render("Select SSH Host:") + "\n\n"
 		
 		for i, host := range m.hosts {
-			cursor := "  "
 			if m.cursor == i {
-				cursor = "▶ "
-				content += selectedStyle.Render(fmt.Sprintf("%s%s\n", cursor, host))
+				content += selectedStyle.Render(fmt.Sprintf("  ▶  %s\n", host))
 			} else {
-				content += fmt.Sprintf("%s%s\n", cursor, host)
+				content += fmt.Sprintf("     %s\n", host)
 			}
 		}
-		content += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("(↑/↓ to move, Enter to select)")
+		content += "\n" + subtleStyle.Render("↑/↓ to move • Enter to select")
 		s += boxStyle.Render(content)
 
 	case stepRemotePort:
-		content := fmt.Sprintf("Host: %s\n\n", selectedStyle.Render(m.hosts[m.selectedHost]))
+		content := "Host: " + selectedStyle.Render(m.hosts[m.selectedHost]) + "\n\n"
 		content += fmt.Sprintf("Remote port: %s█", m.input)
 		s += boxStyle.Render(content)
 
 	case stepLocalPort:
-		content := fmt.Sprintf("Remote port: %s\n\n", successStyle.Render(m.remotePort))
+		content := "Remote port: " + successStyle.Render(m.remotePort) + "\n\n"
 		content += fmt.Sprintf("Local port: %s█", m.input)
 		if m.err != nil {
 			content += "\n\n" + errorStyle.Render("❌ " + m.err.Error())
@@ -255,25 +258,25 @@ func (m model) View() string {
 		s += boxStyle.Render(content)
 
 	case stepVerbose:
-		content := "Show verbose SSH logs? (y/n): "
+		content := "Show verbose SSH logs? " + subtleStyle.Render("(y/n)")
 		s += boxStyle.Render(content)
 
 	case stepConfirm:
 		art := `
-    ┌─────────────────────────────┐
-    │   🔗 TUNNEL READY 🔗       │
-    └─────────────────────────────┘
+      ┌───────────────────────────┐
+      │   🔗 TUNNEL READY 🔗     │
+      └───────────────────────────┘
 `
 		content := lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Render(art) + "\n"
 		content += fmt.Sprintf("  Host:    %s\n", successStyle.Render(m.hosts[m.selectedHost]))
 		content += fmt.Sprintf("  Local:   %s\n", successStyle.Render("localhost:"+m.localPort))
 		content += fmt.Sprintf("  Remote:  %s\n", successStyle.Render(m.remotePort))
 		content += fmt.Sprintf("  Verbose: %s\n\n", successStyle.Render(fmt.Sprintf("%v", m.verbose)))
-		content += lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("Press Enter to start...")
+		content += subtleStyle.Render("Press Enter to start...")
 		s += boxStyle.Render(content)
 	}
 
-	s += "\n\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("(ctrl+c or q to quit)")
+	s += "\n" + subtleStyle.Render("ctrl+c or q to quit")
 	return s
 }
 
