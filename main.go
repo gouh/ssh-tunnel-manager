@@ -740,14 +740,7 @@ func (m model) renderNewTunnelForm() string {
 		content += subtleStyle.Render(fmt.Sprintf("Host: %s\nPorts: %s → %s", m.tempHost, m.tempLocal, m.tempRemote))
 	}
 
-	// Center content
-	centeredContent := lipgloss.NewStyle().Width(60).Align(lipgloss.Center).Render(content)
-	modal := panelStyle.Width(60).Render(centeredContent)
-	
-	// Center the form on screen
-	centered := lipgloss.Place(m.width, m.height-4, lipgloss.Center, lipgloss.Center, modal)
-	
-	return centered
+	return panelStyle.Width(60).Render(content)
 }
 
 func getSSHHosts() []string {
