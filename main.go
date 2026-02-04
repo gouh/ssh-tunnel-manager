@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,10 +16,7 @@ import (
 type step int
 
 const (
-	stepCheckVPN step = iota
-	stepVPNPrompt
-	stepStartingVPN
-	stepHost
+	stepHost step = iota
 	stepRemotePort
 	stepLocalPort
 	stepVerbose
@@ -28,12 +24,8 @@ const (
 	stepRunning
 )
 
-type vpnCheckMsg bool
-type vpnStartedMsg bool
-
 type model struct {
 	step         step
-	vpnRunning   bool
 	hosts        []string
 	selectedHost int
 	remotePort   string
@@ -75,51 +67,18 @@ func initialModel() model {
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	
 	return model{
-		step:    stepCheckVPN,
+		step:    stepHost,
+		hosts:   getSSHHosts(),
 		spinner: s,
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, checkVPNCmd())
-}
-
-func checkVPNCmd() tea.Cmd {
-	return func() tea.Msg {
-		cmd := exec.Command("pgrep", "-x", "openvpn")
-		err := cmd.Run()
-		return vpnCheckMsg(err == nil)
-	}
-}
-
-func startVPNCmd() tea.Cmd {
-	return func() tea.Msg {
-		exec.Command("sudo", "pkill", "openvpn").Run()
-		time.Sleep(2 * time.Second)
-		exec.Command("sudo", "openvpn", "--config", os.Getenv("HOME")+"/vpn/mor/pfsense-sorg-UDP4-1194-hugo.hernandez.ovpn", "--daemon").Run()
-		time.Sleep(5 * time.Second)
-		return vpnStartedMsg(true)
-	}
+	return m.spinner.Tick
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case vpnCheckMsg:
-		m.vpnRunning = bool(msg)
-		if m.vpnRunning {
-			m.hosts = getSSHHosts()
-			m.step = stepHost
-		} else {
-			m.step = stepVPNPrompt
-		}
-		return m, nil
-
-	case vpnStartedMsg:
-		m.vpnRunning = true
-		m.hosts = getSSHHosts()
-		m.step = stepHost
-		return m, nil
-
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -144,18 +103,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "y", "Y":
-			if m.step == stepVPNPrompt {
-				m.step = stepStartingVPN
-				return m, tea.Batch(m.spinner.Tick, startVPNCmd())
-			} else if m.step == stepVerbose {
+			if m.step == stepVerbose {
 				m.verbose = true
 				m.step = stepConfirm
 			}
 
 		case "n", "N":
-			if m.step == stepVPNPrompt {
-				return m, tea.Quit
-			} else if m.step == stepVerbose {
+			if m.step == stepVerbose {
 				m.verbose = false
 				m.step = stepConfirm
 			}
@@ -216,32 +170,20 @@ func (m model) View() string {
 	s += titleStyle.Render(banner) + "\n\n"
 
 	switch m.step {
-	case stepCheckVPN:
-		content := fmt.Sprintf("%s  Checking VPN status...", m.spinner.View())
-		s += boxStyle.Render(content)
-
-	case stepVPNPrompt:
-		content := warningStyle.Render("⚠️  VPN is not running") + "\n\n"
-		content += "Start VPN? " + subtleStyle.Render("(y/n)")
-		s += boxStyle.Render(content)
-
-	case stepStartingVPN:
-		content := fmt.Sprintf("%s  Starting VPN...\n\n", m.spinner.View())
-		content += subtleStyle.Render("This may take a few seconds...")
-		s += boxStyle.Render(content)
-
 	case stepHost:
-		content := successStyle.Render("✅ VPN Connected") + "\n\n"
-		content += lipgloss.NewStyle().Bold(true).Render("Select SSH Host:") + "\n\n"
+		content := lipgloss.NewStyle().Bold(true).Render("Select SSH Host:") + "\n\n"
 		
 		for i, host := range m.hosts {
 			if m.cursor == i {
-				content += selectedStyle.Render(fmt.Sprintf("  ▶  %s\n", host))
+				content += selectedStyle.Render(fmt.Sprintf("  ▶  %s", host))
 			} else {
-				content += fmt.Sprintf("     %s\n", host)
+				content += fmt.Sprintf("     %s", host)
+			}
+			if i < len(m.hosts)-1 {
+				content += "\n"
 			}
 		}
-		content += "\n" + subtleStyle.Render("↑/↓ to move • Enter to select")
+		content += "\n\n" + subtleStyle.Render("↑/↓ to move • Enter to select")
 		s += boxStyle.Render(content)
 
 	case stepRemotePort:
