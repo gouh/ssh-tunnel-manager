@@ -274,9 +274,20 @@ func (m model) View() string {
 
 func (m model) renderMainView() string {
 	// Calculate dimensions
+	if m.width < 80 || m.height < 20 {
+		return subtleStyle.Render("Terminal too small. Please resize to at least 80x20")
+	}
+	
 	sidebarWidth := 40
 	bodyWidth := m.width - sidebarWidth - 4
 	contentHeight := m.height - 8 // Reserve space for header and footer
+	
+	if bodyWidth < 10 {
+		bodyWidth = 10
+	}
+	if contentHeight < 5 {
+		contentHeight = 5
+	}
 	
 	// Sidebar: Active Tunnels
 	sidebar := m.renderSidebar(sidebarWidth, contentHeight)
@@ -299,8 +310,13 @@ func (m model) renderSidebar(width, height int) string {
 		style = selectedPanelStyle.Width(width).Height(height)
 	}
 
+	sepWidth := width - 4
+	if sepWidth < 1 {
+		sepWidth = 1
+	}
+
 	content := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")).Render("ACTIVE TUNNELS") + "\n"
-	content += strings.Repeat("─", width-4) + "\n\n"
+	content += strings.Repeat("─", sepWidth) + "\n\n"
 
 	if len(m.tunnels) == 0 {
 		content += subtleStyle.Render("No tunnels active\n\nPress 'n' to create one")
@@ -340,8 +356,13 @@ func (m model) renderBody(width, height int) string {
 		style = selectedPanelStyle.Width(width).Height(height)
 	}
 
+	sepWidth := width - 4
+	if sepWidth < 1 {
+		sepWidth = 1
+	}
+
 	content := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")).Render("TUNNEL OUTPUT") + "\n"
-	content += strings.Repeat("─", width-4) + "\n\n"
+	content += strings.Repeat("─", sepWidth) + "\n\n"
 
 	if len(m.tunnels) == 0 || m.selectedTunnel >= len(m.tunnels) {
 		content += subtleStyle.Render("No tunnel selected")
@@ -362,7 +383,7 @@ func (m model) renderBody(width, height int) string {
 		}())
 		
 		content += lipgloss.NewStyle().Bold(true).Render("Logs:") + "\n"
-		content += strings.Repeat("─", width-4) + "\n"
+		content += strings.Repeat("─", sepWidth) + "\n"
 		
 		// Show logs
 		for _, log := range t.logs {
