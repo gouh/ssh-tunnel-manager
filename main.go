@@ -210,7 +210,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.tunnels[i].logs = m.tunnels[i].logs[1:]
 					}
 				}
-				return m, m.waitForLog(msg.tunnelID)
+				// Continue listening for logs if tunnel is still active
+				if m.tunnels[i].active && m.tunnels[i].logChan != nil {
+					cmds = append(cmds, m.waitForLog(msg.tunnelID))
+				}
+				break
 			}
 		}
 		
@@ -516,7 +520,11 @@ func (m *model) waitForLog(tunnelID int) tea.Cmd {
 					if ok && line != "" {
 						return logMsg{tunnelID: tunnelID, line: fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), line)}
 					}
+					// Channel closed, stop listening
+					return nil
 				case <-time.After(100 * time.Millisecond):
+					// Timeout, send empty message to continue listening
+					return logMsg{tunnelID: tunnelID, line: ""}
 				}
 			}
 		}
