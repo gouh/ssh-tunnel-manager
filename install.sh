@@ -1,11 +1,9 @@
 #!/bin/bash
 
 # SSH Tunnel Manager - Installation Script
-# Version: 0.0.1
 
 set -e
 
-VERSION="0.0.1"
 REPO="gouh/ssh-tunnel-manager"
 INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="ssh-tunnel-manager"
@@ -41,9 +39,9 @@ case "$ARCH" in
 esac
 
 DOWNLOAD_FILE="ssh-tunnel-manager-${OS_NAME}-${ARCH_NAME}"
-DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${DOWNLOAD_FILE}"
+DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${DOWNLOAD_FILE}"
 
-echo "🚀 Installing SSH Tunnel Manager v${VERSION}"
+echo "🚀 Installing SSH Tunnel Manager (latest)"
 echo "   OS: ${OS_NAME}"
 echo "   Architecture: ${ARCH_NAME}"
 echo ""
