@@ -478,29 +478,18 @@ func (m model) renderQuitConfirm() string {
 	content += errorStyle.Render("N") + subtleStyle.Render(" - No, go back\n")
 	content += subtleStyle.Render("Esc - Cancel")
 	
-	// Create modal box
-	modalStyle := lipgloss.NewStyle().
-		Border(lipgloss.DoubleBorder()).
-		BorderForeground(lipgloss.Color("#FF5555")).
-		Padding(2, 4).
-		Width(50).
-		Align(lipgloss.Center)
+	// Use same style as new tunnel form
+	modal := panelStyle.Width(60).Render(content)
 	
-	modal := modalStyle.Render(content)
-	
-	// Center the modal
-	verticalPadding := (m.height - 15) / 2
+	// Center vertically and horizontally
+	verticalPadding := (m.height - 12) / 2
 	if verticalPadding < 0 {
 		verticalPadding = 0
 	}
 	
-	padding := strings.Repeat("\n", verticalPadding)
+	centered := lipgloss.Place(m.width, m.height-4, lipgloss.Center, lipgloss.Center, modal)
 	
-	// Create overlay effect with main view in background (dimmed)
-	background := m.renderMainView()
-	dimmedBg := subtleStyle.Render(background)
-	
-	return dimmedBg + "\n" + padding + lipgloss.Place(m.width, 10, lipgloss.Center, lipgloss.Center, modal)
+	return centered
 }
 
 func (m model) renderTopBar() string {
