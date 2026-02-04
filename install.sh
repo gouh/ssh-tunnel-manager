@@ -51,11 +51,28 @@ echo ""
 # Download binary
 echo "📥 Downloading from GitHub..."
 if command -v curl &> /dev/null; then
-    curl -L -o "/tmp/${BINARY_NAME}" "${DOWNLOAD_URL}"
+    curl -L -f -o "/tmp/${BINARY_NAME}" "${DOWNLOAD_URL}" || {
+        echo "❌ Error: Failed to download binary"
+        echo "URL: ${DOWNLOAD_URL}"
+        exit 1
+    }
 elif command -v wget &> /dev/null; then
-    wget -O "/tmp/${BINARY_NAME}" "${DOWNLOAD_URL}"
+    wget -O "/tmp/${BINARY_NAME}" "${DOWNLOAD_URL}" || {
+        echo "❌ Error: Failed to download binary"
+        echo "URL: ${DOWNLOAD_URL}"
+        exit 1
+    }
 else
     echo "❌ Error: curl or wget is required"
+    exit 1
+fi
+
+# Verify it's a binary file
+if file "/tmp/${BINARY_NAME}" | grep -q "text"; then
+    echo "❌ Error: Downloaded file is not a binary"
+    echo "This usually means the release doesn't exist yet."
+    echo "Please create the release at: https://github.com/${REPO}/releases/new"
+    rm "/tmp/${BINARY_NAME}"
     exit 1
 fi
 
