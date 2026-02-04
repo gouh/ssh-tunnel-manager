@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2026-02-04
+
+### Added
+
+- Reduce tick frequency from 250ms to 1 second
+- Copy only visible logs instead of all logs
+- Truncate long lines to prevent panel overflow
+- Remove glamour dependency for faster text rendering
+
+
 ## [0.1.2] - 2026-02-04
 
 ### Added
