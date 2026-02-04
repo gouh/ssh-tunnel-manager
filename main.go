@@ -209,10 +209,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if len(m.tunnels[i].logs) > 100 {
 						m.tunnels[i].logs = m.tunnels[i].logs[1:]
 					}
-				}
-				// Continue listening for logs if tunnel is still active
-				if m.tunnels[i].active && m.tunnels[i].logChan != nil {
-					cmds = append(cmds, m.waitForLog(msg.tunnelID))
+					// Continue listening only when we got a real log
+					if m.tunnels[i].active && m.tunnels[i].logChan != nil {
+						cmds = append(cmds, m.waitForLog(msg.tunnelID))
+					}
 				}
 				break
 			}
@@ -512,8 +512,6 @@ func (m *model) finalizeTunnel() (tea.Model, tea.Cmd) {
 
 func (m *model) waitForLog(tunnelID int) tea.Cmd {
 	return func() tea.Msg {
-		time.Sleep(200 * time.Millisecond)
-		
 		// Find the tunnel
 		for i := range m.tunnels {
 			if m.tunnels[i].id == tunnelID && m.tunnels[i].logChan != nil {
@@ -526,11 +524,10 @@ func (m *model) waitForLog(tunnelID int) tea.Cmd {
 					if line != "" {
 						return logMsg{tunnelID: tunnelID, line: fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), line)}
 					}
-				default:
-					// No data available, continue
+				case <-time.After(2 * time.Second):
+					// No logs for 2 seconds, stop polling
+					return nil
 				}
-				// Continue listening
-				return logMsg{tunnelID: tunnelID, line: ""}
 			}
 		}
 		return nil
