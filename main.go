@@ -120,7 +120,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "tab":
 			if m.view == viewMain {
-				m.selectedPanel = (m.selectedPanel + 1) % 3
+				m.selectedPanel = (m.selectedPanel + 1) % 2 // Only 2 panels now
 			}
 
 		case "n":
@@ -273,28 +273,37 @@ func (m model) View() string {
 }
 
 func (m model) renderMainView() string {
-	// Three panels: Active Tunnels | Actions | Logs
-	tunnelsPanel := m.renderTunnelsPanel()
-	actionsPanel := m.renderActionsPanel()
-	logsPanel := m.renderLogsPanel()
-
-	row := lipgloss.JoinHorizontal(lipgloss.Top, tunnelsPanel, actionsPanel, logsPanel)
+	// Calculate dimensions
+	sidebarWidth := 40
+	bodyWidth := m.width - sidebarWidth - 4
+	contentHeight := m.height - 8 // Reserve space for header and footer
 	
-	help := "\n" + subtleStyle.Render("Tab: switch panel • n: new tunnel • d: delete • q: quit")
+	// Sidebar: Active Tunnels
+	sidebar := m.renderSidebar(sidebarWidth, contentHeight)
 	
-	return row + help
+	// Body: Tunnel Output/Logs
+	body := m.renderBody(bodyWidth, contentHeight)
+	
+	// Join sidebar and body
+	content := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, body)
+	
+	// Footer: Actions/Help
+	footer := m.renderFooter(m.width)
+	
+	return content + "\n" + footer
 }
 
-func (m model) renderTunnelsPanel() string {
-	style := panelStyle
+func (m model) renderSidebar(width, height int) string {
+	style := panelStyle.Width(width).Height(height)
 	if m.selectedPanel == 0 {
-		style = selectedPanelStyle
+		style = selectedPanelStyle.Width(width).Height(height)
 	}
 
-	content := lipgloss.NewStyle().Bold(true).Render("Active Tunnels") + "\n\n"
+	content := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")).Render("ACTIVE TUNNELS") + "\n"
+	content += strings.Repeat("─", width-4) + "\n\n"
 
 	if len(m.tunnels) == 0 {
-		content += subtleStyle.Render("No tunnels active\nPress 'n' to create one")
+		content += subtleStyle.Render("No tunnels active\n\nPress 'n' to create one")
 	} else {
 		for i, t := range m.tunnels {
 			status := activeStyle.Render("●")
@@ -302,56 +311,85 @@ func (m model) renderTunnelsPanel() string {
 				status = inactiveStyle.Render("●")
 			}
 
-			line := fmt.Sprintf("%s #%d %s:%s→%s", status, t.id, t.host, t.localPort, t.remotePort)
+			line := fmt.Sprintf("%s #%d", status, t.id)
+			hostLine := fmt.Sprintf("  %s", t.host)
+			portLine := fmt.Sprintf("  %s → %s", t.localPort, t.remotePort)
 			
 			if i == m.selectedTunnel && m.selectedPanel == 0 {
 				content += selectedStyle.Render("▶ " + line) + "\n"
+				content += selectedStyle.Render(hostLine) + "\n"
+				content += selectedStyle.Render(portLine) + "\n"
 			} else {
 				content += "  " + line + "\n"
+				content += subtleStyle.Render(hostLine) + "\n"
+				content += subtleStyle.Render(portLine) + "\n"
+			}
+			
+			if i < len(m.tunnels)-1 {
+				content += "\n"
 			}
 		}
 	}
 
-	return style.Width(35).Height(15).Render(content)
+	return style.Render(content)
 }
 
-func (m model) renderActionsPanel() string {
-	style := panelStyle
+func (m model) renderBody(width, height int) string {
+	style := panelStyle.Width(width).Height(height)
 	if m.selectedPanel == 1 {
-		style = selectedPanelStyle
+		style = selectedPanelStyle.Width(width).Height(height)
 	}
 
-	content := lipgloss.NewStyle().Bold(true).Render("Actions") + "\n\n"
-	content += "n - New tunnel\n"
-	content += "d - Delete tunnel\n"
-	content += "↑/↓ - Navigate\n"
-	content += "Tab - Switch panel\n"
-	content += "q - Quit\n"
-
-	return style.Width(25).Height(15).Render(content)
-}
-
-func (m model) renderLogsPanel() string {
-	style := panelStyle
-	if m.selectedPanel == 2 {
-		style = selectedPanelStyle
-	}
-
-	content := lipgloss.NewStyle().Bold(true).Render("Logs") + "\n\n"
+	content := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")).Render("TUNNEL OUTPUT") + "\n"
+	content += strings.Repeat("─", width-4) + "\n\n"
 
 	if len(m.tunnels) == 0 || m.selectedTunnel >= len(m.tunnels) {
 		content += subtleStyle.Render("No tunnel selected")
 	} else {
 		t := m.tunnels[m.selectedTunnel]
-		content += fmt.Sprintf("Tunnel #%d\n", t.id)
-		content += fmt.Sprintf("%s:%s → %s\n\n", t.host, t.localPort, t.remotePort)
 		
+		// Tunnel info
+		content += successStyle.Render(fmt.Sprintf("Tunnel #%d", t.id)) + "\n"
+		content += fmt.Sprintf("Host: %s\n", selectedStyle.Render(t.host))
+		content += fmt.Sprintf("Local Port: %s\n", selectedStyle.Render(t.localPort))
+		content += fmt.Sprintf("Remote Port: %s\n", selectedStyle.Render(t.remotePort))
+		content += fmt.Sprintf("Verbose: %v\n", t.verbose)
+		content += fmt.Sprintf("Status: %s\n\n", func() string {
+			if t.active {
+				return activeStyle.Render("ACTIVE")
+			}
+			return inactiveStyle.Render("INACTIVE")
+		}())
+		
+		content += lipgloss.NewStyle().Bold(true).Render("Logs:") + "\n"
+		content += strings.Repeat("─", width-4) + "\n"
+		
+		// Show logs
 		for _, log := range t.logs {
 			content += subtleStyle.Render(log) + "\n"
 		}
 	}
 
-	return style.Width(40).Height(15).Render(content)
+	return style.Render(content)
+}
+
+func (m model) renderFooter(width int) string {
+	leftHelp := "Tab: switch panel"
+	centerHelp := "n: new tunnel • d: delete • ↑/↓: navigate"
+	rightHelp := "q: quit"
+	
+	leftStyle := subtleStyle.Width(width / 3).Align(lipgloss.Left)
+	centerStyle := subtleStyle.Width(width / 3).Align(lipgloss.Center)
+	rightStyle := subtleStyle.Width(width / 3).Align(lipgloss.Right)
+	
+	footer := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		leftStyle.Render(leftHelp),
+		centerStyle.Render(centerHelp),
+		rightStyle.Render(rightHelp),
+	)
+	
+	return "\n" + footer
 }
 
 func (m model) renderNewTunnelForm() string {
