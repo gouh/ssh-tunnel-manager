@@ -20,6 +20,7 @@ type view int
 const (
 	viewMain view = iota
 	viewNewTunnel
+	viewQuitConfirm
 )
 
 type tunnelStep int
@@ -164,13 +165,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
-			// Close all tunnels before quitting
-			for i := range m.tunnels {
-				if m.tunnels[i].active && m.tunnels[i].cmd != nil {
-					m.tunnels[i].cmd.Process.Kill()
+			if m.view == viewQuitConfirm {
+				// Already in quit confirm, force quit
+				for i := range m.tunnels {
+					if m.tunnels[i].active && m.tunnels[i].cmd != nil {
+						m.tunnels[i].cmd.Process.Kill()
+					}
 				}
+				return m, tea.Quit
 			}
-			return m, tea.Quit
+			// Show quit confirmation
+			m.view = viewQuitConfirm
+			return m, nil
 
 		case "tab":
 			if m.view == viewMain {
@@ -184,6 +190,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.input = ""
 				m.err = nil
+			} else if m.view == viewQuitConfirm {
+				m.view = viewMain
+			}
+		
+		case "N":
+			if m.view == viewQuitConfirm {
+				m.view = viewMain
 			}
 		
 		case "m":
@@ -194,6 +207,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "esc":
 			if m.view == viewNewTunnel {
+				m.view = viewMain
+			} else if m.view == viewQuitConfirm {
 				m.view = viewMain
 			}
 
@@ -257,6 +272,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.step = stepConnecting
 				m.progress.SetPercent(0)
 				return m, tickProgress()
+			} else if m.view == viewQuitConfirm {
+				// Confirm quit
+				for i := range m.tunnels {
+					if m.tunnels[i].active && m.tunnels[i].cmd != nil {
+						m.tunnels[i].cmd.Process.Kill()
+					}
+				}
+				return m, tea.Quit
 			}
 
 		case "backspace":
@@ -421,11 +444,63 @@ func (m model) View() string {
 	// Top bar
 	topBar := m.renderTopBar()
 	
+	if m.view == viewQuitConfirm {
+		return topBar + "\n" + m.renderQuitConfirm()
+	}
+	
 	if m.view == viewNewTunnel {
 		return topBar + "\n" + m.renderNewTunnelForm()
 	}
 
 	return topBar + "\n" + m.renderMainView()
+}
+
+func (m model) renderQuitConfirm() string {
+	// Create modal content
+	activeTunnels := 0
+	for _, t := range m.tunnels {
+		if t.active {
+			activeTunnels++
+		}
+	}
+	
+	var content string
+	content += errorStyle.Render("⚠️  Quit Confirmation") + "\n\n"
+	
+	if activeTunnels > 0 {
+		content += fmt.Sprintf("You have %s active tunnel(s).\n", highlightStyle.Render(fmt.Sprintf("%d", activeTunnels)))
+		content += "All tunnels will be closed.\n\n"
+	} else {
+		content += "Are you sure you want to quit?\n\n"
+	}
+	
+	content += successStyle.Render("Y") + subtleStyle.Render(" - Yes, quit\n")
+	content += errorStyle.Render("N") + subtleStyle.Render(" - No, go back\n")
+	content += subtleStyle.Render("Esc - Cancel")
+	
+	// Create modal box
+	modalStyle := lipgloss.NewStyle().
+		Border(lipgloss.DoubleBorder()).
+		BorderForeground(lipgloss.Color("#FF5555")).
+		Padding(2, 4).
+		Width(50).
+		Align(lipgloss.Center)
+	
+	modal := modalStyle.Render(content)
+	
+	// Center the modal
+	verticalPadding := (m.height - 15) / 2
+	if verticalPadding < 0 {
+		verticalPadding = 0
+	}
+	
+	padding := strings.Repeat("\n", verticalPadding)
+	
+	// Create overlay effect with main view in background (dimmed)
+	background := m.renderMainView()
+	dimmedBg := subtleStyle.Render(background)
+	
+	return dimmedBg + "\n" + padding + lipgloss.Place(m.width, 10, lipgloss.Center, lipgloss.Center, modal)
 }
 
 func (m model) renderTopBar() string {
