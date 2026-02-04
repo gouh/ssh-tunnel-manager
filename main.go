@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/moby/moby/pkg/namesgenerator"
@@ -25,10 +26,12 @@ type tunnelStep int
 
 const (
 	stepHost tunnelStep = iota
+	stepManualHost
 	stepRemotePort
 	stepLocalPort
 	stepTag
 	stepVerbose
+	stepConnecting
 )
 
 type tunnel struct {
@@ -62,6 +65,7 @@ type model struct {
 	tempTag      string
 	tempVerbose  bool
 	err          error
+	progress     progress.Model
 	
 	nextTunnelID int
 	width        int
@@ -69,22 +73,23 @@ type model struct {
 }
 
 var (
-	titleStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
-	errorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
-	successStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("46")).Bold(true)
-	selectedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true)
-	subtleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	activeStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
-	inactiveStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	titleStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF79C6"))
+	errorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555")).Bold(true)
+	successStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B")).Bold(true)
+	selectedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8BE9FD")).Bold(true)
+	subtleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#6272A4"))
+	activeStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#50FA7B"))
+	inactiveStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5555"))
+	highlightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C"))
 	
 	panelStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("63")).
+			BorderForeground(lipgloss.Color("#6272A4")).
 			Padding(1, 2)
 	
 	selectedPanelStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("212")).
+				BorderForeground(lipgloss.Color("#BD93F9")).
 				Padding(1, 2)
 )
 
@@ -95,11 +100,15 @@ const banner = `
 `
 
 func initialModel() model {
+	prog := progress.New(progress.WithDefaultGradient())
+	prog.Width = 40
+	
 	return model{
 		view:          viewMain,
 		hosts:         getSSHHosts(),
 		selectedPanel: 0,
 		nextTunnelID:  1,
+		progress:      prog,
 	}
 }
 
@@ -108,12 +117,30 @@ type logMsg struct {
 	line     string
 }
 
+type progressMsg float64
+
 func (m model) Init() tea.Cmd {
 	return nil
 }
 
+func tickProgress() tea.Cmd {
+	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
+		return progressMsg(0.1)
+	})
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case progressMsg:
+		if m.view == viewNewTunnel && m.step == stepConnecting {
+			cmd := m.progress.IncrPercent(float64(msg))
+			if m.progress.Percent() >= 1.0 {
+				// Connection complete
+				return m.finalizeTunnel()
+			}
+			return m, tea.Batch(cmd, tickProgress())
+		}
+		
 	case logMsg:
 		// Update logs for the specific tunnel
 		for i := range m.tunnels {
@@ -157,6 +184,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.input = ""
 				m.err = nil
+			}
+		
+		case "m":
+			if m.view == viewNewTunnel && m.step == stepHost {
+				m.step = stepManualHost
+				m.input = ""
 			}
 
 		case "esc":
@@ -221,7 +254,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "y", "Y":
 			if m.view == viewNewTunnel && m.step == stepVerbose {
 				m.tempVerbose = true
-				return m.createTunnel()
+				m.step = stepConnecting
+				m.progress.SetPercent(0)
+				return m, tickProgress()
 			}
 
 		case "backspace":
@@ -242,6 +277,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.input += msg.String()
 					}
 				}
+			} else if m.view == viewNewTunnel && m.step == stepManualHost {
+				// Allow alphanumeric, dots, hyphens, @ for manual host
+				if len(msg.String()) == 1 {
+					c := msg.String()[0]
+					if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '@' {
+						m.input += msg.String()
+					}
+				}
 			}
 		}
 	}
@@ -254,6 +297,13 @@ func (m model) handleEnter() (tea.Model, tea.Cmd) {
 		case stepHost:
 			m.tempHost = m.hosts[m.cursor]
 			m.step = stepRemotePort
+		
+		case stepManualHost:
+			if m.input != "" {
+				m.tempHost = m.input
+				m.input = ""
+				m.step = stepRemotePort
+			}
 
 		case stepRemotePort:
 			if m.input != "" {
@@ -286,13 +336,15 @@ func (m model) handleEnter() (tea.Model, tea.Cmd) {
 		
 		case stepVerbose:
 			m.tempVerbose = false
-			return m.createTunnel()
+			m.step = stepConnecting
+			m.progress.SetPercent(0)
+			return m, tickProgress()
 		}
 	}
 	return m, nil
 }
 
-func (m *model) createTunnel() (tea.Model, tea.Cmd) {
+func (m *model) finalizeTunnel() (tea.Model, tea.Cmd) {
 	args := []string{"-N", "-L", fmt.Sprintf("%s:localhost:%s", m.tempLocal, m.tempRemote)}
 	if m.tempVerbose {
 		args = append(args, "-v")
@@ -345,6 +397,7 @@ func (m *model) createTunnel() (tea.Model, tea.Cmd) {
 
 	return m, m.waitForLog(tunnelID)
 }
+
 
 func (m *model) waitForLog(tunnelID int) tea.Cmd {
 	return func() tea.Msg {
@@ -436,7 +489,7 @@ func (m model) renderSidebar(width, height int) string {
 		sepWidth = 1
 	}
 
-	content := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")).Render("ACTIVE TUNNELS") + "\n"
+	content := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF79C6")).Render("ACTIVE TUNNELS") + "\n"
 	content += strings.Repeat("─", sepWidth) + "\n\n"
 
 	if len(m.tunnels) == 0 {
@@ -482,7 +535,7 @@ func (m model) renderBody(width, height int) string {
 		sepWidth = 1
 	}
 
-	content := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212")).Render("TUNNEL OUTPUT") + "\n"
+	content := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF79C6")).Render("TUNNEL OUTPUT") + "\n"
 	content += strings.Repeat("─", sepWidth) + "\n\n"
 
 	if len(m.tunnels) == 0 || m.selectedTunnel >= len(m.tunnels) {
@@ -590,7 +643,7 @@ func (m model) renderNewTunnelForm() string {
 				content += "\n"
 			}
 		}
-		content += "\n\n" + subtleStyle.Render("↑/↓ to move • Enter to select • Esc to cancel")
+		content += "\n\n" + subtleStyle.Render("↑/↓ to move • Enter to select • m for manual • Esc to cancel")
 
 	case stepRemotePort:
 		content = "Host: " + selectedStyle.Render(m.tempHost) + "\n\n"
@@ -612,6 +665,16 @@ func (m model) renderNewTunnelForm() string {
 
 	case stepVerbose:
 		content = "Show verbose SSH logs? " + subtleStyle.Render("(y/n or just Enter for no)")
+	
+	case stepManualHost:
+		content = lipgloss.NewStyle().Bold(true).Render("Enter SSH host manually:") + "\n\n"
+		content += fmt.Sprintf("Host: %s█", m.input)
+		content += "\n\n" + subtleStyle.Render("Format: user@host or host • Esc to cancel")
+	
+	case stepConnecting:
+		content = highlightStyle.Render("Connecting to tunnel...") + "\n\n"
+		content += m.progress.View() + "\n\n"
+		content += subtleStyle.Render(fmt.Sprintf("Host: %s\nPorts: %s → %s", m.tempHost, m.tempLocal, m.tempRemote))
 	}
 
 	return panelStyle.Width(60).Render(content)
