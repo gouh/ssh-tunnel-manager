@@ -26,11 +26,13 @@ const (
 	stepHost tunnelStep = iota
 	stepRemotePort
 	stepLocalPort
+	stepTag
 	stepVerbose
 )
 
 type tunnel struct {
 	id         int
+	tag        string
 	host       string
 	localPort  string
 	remotePort string
@@ -55,6 +57,7 @@ type model struct {
 	tempHost     string
 	tempRemote   string
 	tempLocal    string
+	tempTag      string
 	tempVerbose  bool
 	err          error
 	
@@ -96,6 +99,15 @@ func initialModel() model {
 		selectedPanel: 0,
 		nextTunnelID:  1,
 	}
+}
+
+var adjectives = []string{"happy", "brave", "clever", "gentle", "bright", "swift", "calm", "bold", "wise", "kind"}
+var nouns = []string{"panda", "tiger", "eagle", "dolphin", "falcon", "wolf", "bear", "fox", "hawk", "lion"}
+
+func generateRandomTag() string {
+	adj := adjectives[time.Now().UnixNano()%int64(len(adjectives))]
+	noun := nouns[(time.Now().UnixNano()/1000)%int64(len(nouns))]
+	return fmt.Sprintf("%s-%s", adj, noun)
 }
 
 type logMsg struct {
@@ -214,6 +226,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(msg.String()) == 1 && msg.String()[0] >= '0' && msg.String()[0] <= '9' {
 					m.input += msg.String()
 				}
+			} else if m.view == viewNewTunnel && m.step == stepTag {
+				// Allow alphanumeric and hyphens for tags
+				if len(msg.String()) == 1 {
+					c := msg.String()[0]
+					if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' {
+						m.input += msg.String()
+					}
+				}
 			}
 		}
 	}
@@ -243,9 +263,18 @@ func (m model) handleEnter() (tea.Model, tea.Cmd) {
 					m.tempLocal = m.input
 					m.input = ""
 					m.err = nil
-					m.step = stepVerbose
+					m.step = stepTag
 				}
 			}
+		
+		case stepTag:
+			if m.input == "" {
+				m.tempTag = generateRandomTag()
+			} else {
+				m.tempTag = m.input
+			}
+			m.input = ""
+			m.step = stepVerbose
 		
 		case stepVerbose:
 			m.tempVerbose = false
@@ -281,6 +310,7 @@ func (m *model) createTunnel() (tea.Model, tea.Cmd) {
 	
 	t := tunnel{
 		id:         tunnelID,
+		tag:        m.tempTag,
 		host:       m.tempHost,
 		localPort:  m.tempLocal,
 		remotePort: m.tempRemote,
@@ -410,7 +440,7 @@ func (m model) renderSidebar(width, height int) string {
 				status = inactiveStyle.Render("●")
 			}
 
-			line := fmt.Sprintf("%s #%d", status, t.id)
+			line := fmt.Sprintf("%s [%s]", status, t.tag)
 			hostLine := fmt.Sprintf("  %s", t.host)
 			portLine := fmt.Sprintf("  %s → %s", t.localPort, t.remotePort)
 			
@@ -453,7 +483,7 @@ func (m model) renderBody(width, height int) string {
 		t := m.tunnels[m.selectedTunnel]
 		
 		// Tunnel info
-		content += successStyle.Render(fmt.Sprintf("Tunnel #%d", t.id)) + "\n"
+		content += successStyle.Render(fmt.Sprintf("[%s]", t.tag)) + "\n"
 		content += fmt.Sprintf("Host: %s\n", selectedStyle.Render(t.host))
 		content += fmt.Sprintf("Local Port: %s\n", selectedStyle.Render(t.localPort))
 		content += fmt.Sprintf("Remote Port: %s\n", selectedStyle.Render(t.remotePort))
@@ -526,6 +556,11 @@ func (m model) renderNewTunnelForm() string {
 			content += "\n\n" + errorStyle.Render("❌ " + m.err.Error())
 		}
 		content += "\n\n" + subtleStyle.Render("Enter port number • Esc to cancel")
+
+	case stepTag:
+		content = "Tag for this tunnel:\n\n"
+		content += fmt.Sprintf("%s█", m.input)
+		content += "\n\n" + subtleStyle.Render("Enter tag or press Enter for random • Esc to cancel")
 
 	case stepVerbose:
 		content = "Show verbose SSH logs? " + subtleStyle.Render("(y/n or just Enter for no)")
