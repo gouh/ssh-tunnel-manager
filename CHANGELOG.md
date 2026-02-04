@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2026-02-04
+
+### Added
+
+- Multi-platform build system (Linux amd64, macOS Intel, macOS Apple Silicon)
+- Build outputs to build/ directory
+- Install script uses latest release automatically
+
+
 ## [0.1.1] - 2026-02-04
 
 ### Added
