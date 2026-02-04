@@ -35,7 +35,6 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/moby/moby/pkg/namesgenerator"
 )
@@ -111,9 +110,6 @@ type model struct {
 	width        int
 	height       int
 	program      *tea.Program
-	
-	// Cache for glamour renderer
-	glamourRenderer *glamour.TermRenderer
 }
 
 var (
@@ -184,20 +180,13 @@ func initialModel() model {
 		Bold(true).
 		Padding(0, 0, 1, 0)
 	
-	// Initialize glamour renderer once
-	renderer, _ := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(80),
-	)
-	
 	return model{
-		view:            viewMain,
-		hosts:           getSSHHosts(),
-		selectedPanel:   0,
-		nextTunnelID:    1,
-		spinner:         s,
-		tunnelList:      tunnelList,
-		glamourRenderer: renderer,
+		view:         viewMain,
+		hosts:        getSSHHosts(),
+		selectedPanel: 0,
+		nextTunnelID: 1,
+		spinner:      s,
+		tunnelList:   tunnelList,
 	}
 }
 
@@ -215,7 +204,7 @@ func (m model) Init() tea.Cmd {
 }
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(time.Millisecond*250, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Second*1, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
@@ -262,6 +251,47 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tunnelList.SetSize(listWidth, listHeight)
 		
 	case tea.KeyMsg:
+		// Handle text input first for forms
+		if m.view == viewNewTunnel && (m.step == stepRemotePort || m.step == stepLocalPort || m.step == stepTag || m.step == stepManualHost) {
+			switch msg.String() {
+			case "esc":
+				m.view = viewMain
+				return m, nil
+			case "enter":
+				return m.handleEnter()
+			case "backspace":
+				if len(m.input) > 0 {
+					m.input = m.input[:len(m.input)-1]
+				}
+			default:
+				if m.step == stepRemotePort || m.step == stepLocalPort {
+					if len(msg.String()) == 1 && msg.String()[0] >= '0' && msg.String()[0] <= '9' {
+						m.input += msg.String()
+					}
+				} else if m.step == stepTag {
+					if len(msg.String()) == 1 {
+						c := msg.String()[0]
+						if c == ' ' {
+							m.input += "_"
+						} else if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' {
+							m.input += msg.String()
+						} else if c >= 'A' && c <= 'Z' {
+							m.input += strings.ToLower(msg.String())
+						}
+					}
+				} else if m.step == stepManualHost {
+					if len(msg.String()) == 1 {
+						c := msg.String()[0]
+						if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '@' {
+							m.input += msg.String()
+						}
+					}
+				}
+			}
+			return m, nil
+		}
+		
+		// Handle other commands
 		switch msg.String() {
 		case "ctrl+c", "q":
 			if m.view == viewQuitConfirm {
@@ -376,40 +406,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				return m, tea.Quit
-			}
-
-		case "backspace":
-			if len(m.input) > 0 {
-				m.input = m.input[:len(m.input)-1]
-			}
-
-		default:
-			if m.view == viewQuitConfirm {
-				// Any key except Y cancels
-				m.view = viewMain
-				return m, nil
-			}
-			
-			if m.view == viewNewTunnel && (m.step == stepRemotePort || m.step == stepLocalPort) {
-				if len(msg.String()) == 1 && msg.String()[0] >= '0' && msg.String()[0] <= '9' {
-					m.input += msg.String()
-				}
-			} else if m.view == viewNewTunnel && m.step == stepTag {
-				// Allow alphanumeric and hyphens for tags
-				if len(msg.String()) == 1 {
-					c := msg.String()[0]
-					if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' {
-						m.input += msg.String()
-					}
-				}
-			} else if m.view == viewNewTunnel && m.step == stepManualHost {
-				// Allow alphanumeric, dots, hyphens, @ for manual host
-				if len(msg.String()) == 1 {
-					c := msg.String()[0]
-					if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '@' {
-						m.input += msg.String()
-					}
-				}
 			}
 		}
 	}
@@ -679,9 +675,9 @@ func (m model) renderBody(width, height int) string {
 
 	t := m.tunnels[m.selectedTunnel]
 	
-	// Simple text rendering without glamour for performance
 	var content strings.Builder
 	
+	// Header info (no glamour needed here)
 	content.WriteString(successStyle.Render(fmt.Sprintf("▶ %s", t.tag)) + "\n\n")
 	content.WriteString(fmt.Sprintf("Host: %s\n", selectedStyle.Render(t.host)))
 	content.WriteString(fmt.Sprintf("Local Port: %s\n", selectedStyle.Render(t.localPort)))
@@ -696,26 +692,34 @@ func (m model) renderBody(width, height int) string {
 	content.WriteString(highlightStyle.Render("Logs:") + "\n")
 	content.WriteString(strings.Repeat("─", width-6) + "\n")
 	
-	// Navigator reads logs from the selected tunnel's goroutine
-	// Thread-safe read with mutex
+	// Calculate available lines for logs
+	availableLines := height - 12
+	if availableLines < 1 {
+		availableLines = 1
+	}
+	
+	// Only read the last N logs we need
 	t.logMutex.Lock()
-	logsCopy := make([]string, len(t.logs))
-	copy(logsCopy, t.logs)
+	totalLogs := len(t.logs)
+	start := totalLogs - availableLines
+	if start < 0 {
+		start = 0
+	}
+	visibleLogs := make([]string, totalLogs-start)
+	copy(visibleLogs, t.logs[start:])
 	t.logMutex.Unlock()
 	
-	if len(logsCopy) > 0 {
-		availableLines := height - 12
-		if availableLines < 1 {
-			availableLines = 1
-		}
-		
-		start := len(logsCopy) - availableLines
-		if start < 0 {
-			start = 0
-		}
-		
-		for i := start; i < len(logsCopy); i++ {
-			content.WriteString(subtleStyle.Render(logsCopy[i]) + "\n")
+	if len(visibleLogs) > 0 {
+		maxWidth := width - 8 // Account for padding and borders
+		for i, log := range visibleLogs {
+			// Truncate long lines to prevent overflow
+			if len(log) > maxWidth {
+				log = log[:maxWidth-3] + "..."
+			}
+			content.WriteString(subtleStyle.Render(log))
+			if i < len(visibleLogs)-1 {
+				content.WriteString("\n")
+			}
 		}
 	} else {
 		content.WriteString(subtleStyle.Render("No logs yet...") + "\n")
