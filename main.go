@@ -1,5 +1,26 @@
 package main
 
+// SSH Tunnel Manager - Architecture Overview
+//
+// Main Goroutine (Navigator):
+//   - Runs the Bubbletea TUI program
+//   - Handles user input (keyboard, resize events)
+//   - Refreshes UI every 100ms via tickMsg
+//   - Navigates between different tunnel views
+//   - Coordinates all tunnel goroutines
+//
+// Tunnel Goroutines (Workers):
+//   - One goroutine per active tunnel
+//   - Reads SSH stderr output independently
+//   - Updates tunnel logs with mutex protection
+//   - Runs until SSH connection closes
+//
+// Communication:
+//   - Tunnels update logs directly (thread-safe with mutex)
+//   - Navigator reads logs when rendering UI
+//   - No blocking channels or message passing
+//   - Clean separation: workers write, navigator reads
+
 import (
 	"bufio"
 	"fmt"
@@ -67,29 +88,29 @@ func (t tunnel) Description() string {
 }
 
 type model struct {
-	view          view
-	tunnels       []tunnel
-	tunnelList    list.Model
-	selectedPanel int // 0=tunnels list, 1=logs
+	view           view
+	tunnels        []tunnel
+	tunnelList     list.Model
+	selectedPanel  int
 	selectedTunnel int
-	logScroll     int // Scroll position for logs
+	logScroll      int
 	
-	// New tunnel form
-	step         tunnelStep
-	hosts        []string
-	cursor       int
-	input        string
-	tempHost     string
-	tempRemote   string
-	tempLocal    string
-	tempTag      string
-	tempVerbose  bool
-	err          error
-	spinner      spinner.Model
+	step        tunnelStep
+	hosts       []string
+	cursor      int
+	input       string
+	tempHost    string
+	tempRemote  string
+	tempLocal   string
+	tempTag     string
+	tempVerbose bool
+	err         error
+	spinner     spinner.Model
 	
 	nextTunnelID int
 	width        int
 	height       int
+	program      *tea.Program
 }
 
 var (
@@ -200,7 +221,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	
 	switch msg := msg.(type) {
 	case tickMsg:
-		// Refresh UI periodically
+		// Main UI refresh tick - the navigator polls all tunnel goroutines
+		// and updates the display without blocking
 		return m, tickCmd()
 		
 	case connectingMsg:
@@ -214,7 +236,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 		
 	case logMsg:
-		// Logs are now updated directly by goroutine, this is just for compatibility
+		// Legacy - logs are now updated directly by goroutines
 		break
 		
 	case tea.WindowSizeMsg:
@@ -493,23 +515,28 @@ func (m *model) finalizeTunnel() (tea.Model, tea.Cmd) {
 	m.selectedTunnel = len(m.tunnels) - 1
 	m.updateTunnelList()
 
-	// Start goroutine to read logs in background
-	go func(tun *tunnel) {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if line != "" {
-				tun.logMutex.Lock()
-				tun.logs = append(tun.logs, fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), line))
-				if len(tun.logs) > 100 {
-					tun.logs = tun.logs[1:]
-				}
-				tun.logMutex.Unlock()
-			}
-		}
-	}(&m.tunnels[len(m.tunnels)-1])
+	// Start dedicated goroutine for this tunnel's log stream
+	// This goroutine runs independently and updates logs in background
+	go m.streamTunnelLogs(&m.tunnels[len(m.tunnels)-1], stderr)
 
 	return m, nil
+}
+
+// streamTunnelLogs runs in a separate goroutine per tunnel
+// It reads from stderr and updates the tunnel's logs independently
+func (m *model) streamTunnelLogs(tun *tunnel, stderr io.ReadCloser) {
+	scanner := bufio.NewScanner(stderr)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line != "" {
+			tun.logMutex.Lock()
+			tun.logs = append(tun.logs, fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), line))
+			if len(tun.logs) > 100 {
+				tun.logs = tun.logs[1:]
+			}
+			tun.logMutex.Unlock()
+		}
+	}
 }
 
 func (m model) View() string {
@@ -657,7 +684,8 @@ func (m model) renderBody(width, height int) string {
 	
 	markdown += "## Logs\n\n"
 	
-	// Read logs with mutex
+	// Navigator reads logs from the selected tunnel's goroutine
+	// Thread-safe read with mutex
 	t.logMutex.Lock()
 	logsCopy := make([]string, len(t.logs))
 	copy(logsCopy, t.logs)
@@ -819,7 +847,10 @@ func isPortInUse(port string) bool {
 }
 
 func main() {
+	// Create the main TUI program (navigator)
 	p := tea.NewProgram(initialModel(), tea.WithAltScreen())
+	
+	// Run the navigator in the main goroutine
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error: %v", err)
 		os.Exit(1)
