@@ -40,30 +40,66 @@ Tab: switch panel • n: new • d: delete  ╰───────────
 
 ## Installation
 
+### Quick Install (Recommended)
+
+Install the latest version with a single command:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/gouh/ssh-tunnel-manager/main/install.sh | bash
+```
+
+Or with wget:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/gouh/ssh-tunnel-manager/main/install.sh | bash
+```
+
+### Manual Installation
+
+#### Download Pre-built Binaries
+
+Download the latest release for your platform:
+
+**Linux (x64)**
+```bash
+wget https://github.com/gouh/ssh-tunnel-manager/releases/latest/download/ssh-tunnel-linux-amd64
+chmod +x ssh-tunnel-linux-amd64
+sudo mv ssh-tunnel-linux-amd64 /usr/local/bin/ssh-tunnel
+```
+
+**macOS (Intel)**
+```bash
+wget https://github.com/gouh/ssh-tunnel-manager/releases/latest/download/ssh-tunnel-darwin-amd64
+chmod +x ssh-tunnel-darwin-amd64
+sudo mv ssh-tunnel-darwin-amd64 /usr/local/bin/ssh-tunnel
+```
+
+**macOS (Apple Silicon)**
+```bash
+wget https://github.com/gouh/ssh-tunnel-manager/releases/latest/download/ssh-tunnel-darwin-arm64
+chmod +x ssh-tunnel-darwin-arm64
+sudo mv ssh-tunnel-darwin-arm64 /usr/local/bin/ssh-tunnel
+```
+
 ### Prerequisites
 
-- Go 1.21 or higher
 - SSH client installed
 - SSH config file at `~/.ssh/config` (optional, for host selection)
 
-### Install from source
+### Build from Source
+
+Requirements: Go 1.21 or higher
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ssh-tunnel.git
-cd ssh-tunnel
+git clone https://github.com/gouh/ssh-tunnel-manager.git
+cd ssh-tunnel-manager
 
 # Build the binary
 go build -o ssh-tunnel
 
 # Install to system (optional)
 sudo cp ssh-tunnel /usr/local/bin/
-```
-
-### Quick install
-
-```bash
-go install github.com/yourusername/ssh-tunnel@latest
 ```
 
 ## Usage
