@@ -263,13 +263,32 @@ func (m *model) createTunnel() (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	s := titleStyle.Render(banner) + "\n"
-
+	// Top bar
+	topBar := m.renderTopBar()
+	
 	if m.view == viewNewTunnel {
-		return s + m.renderNewTunnelForm()
+		return topBar + "\n" + m.renderNewTunnelForm()
 	}
 
-	return s + m.renderMainView()
+	return topBar + "\n" + m.renderMainView()
+}
+
+func (m model) renderTopBar() string {
+	if m.width < 10 {
+		return titleStyle.Render(banner)
+	}
+	
+	title := "SSH TUNNEL MANAGER"
+	padding := (m.width - len(title) - 4) / 2
+	if padding < 0 {
+		padding = 0
+	}
+	
+	topBorder := "╭" + strings.Repeat("─", m.width-2) + "╮"
+	titleLine := "│" + strings.Repeat(" ", padding) + title + strings.Repeat(" ", m.width-len(title)-padding-2) + "│"
+	bottomBorder := "╰" + strings.Repeat("─", m.width-2) + "╯"
+	
+	return titleStyle.Render(topBorder + "\n" + titleLine + "\n" + bottomBorder)
 }
 
 func (m model) renderMainView() string {
