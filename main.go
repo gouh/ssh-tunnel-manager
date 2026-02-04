@@ -38,6 +38,7 @@ type tunnel struct {
 	cmd        *exec.Cmd
 	logs       []string
 	active     bool
+	logChan    chan string
 }
 
 type model struct {
@@ -97,12 +98,33 @@ func initialModel() model {
 	}
 }
 
+type logMsg struct {
+	tunnelID int
+	line     string
+}
+
 func (m model) Init() tea.Cmd {
 	return nil
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case logMsg:
+		// Update logs for the specific tunnel
+		for i := range m.tunnels {
+			if m.tunnels[i].id == msg.tunnelID {
+				if msg.line != "" {
+					m.tunnels[i].logs = append(m.tunnels[i].logs, msg.line)
+					// Keep only last 100 lines
+					if len(m.tunnels[i].logs) > 100 {
+						m.tunnels[i].logs = m.tunnels[i].logs[1:]
+					}
+				}
+				return m, m.waitForLog(msg.tunnelID)
+			}
+		}
+		return m, nil
+		
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -241,25 +263,67 @@ func (m *model) createTunnel() (tea.Model, tea.Cmd) {
 	args = append(args, m.tempHost)
 
 	cmd := exec.Command("ssh", args...)
-	cmd.Start()
+	
+	// Create pipes for stderr (SSH outputs to stderr)
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return m, nil
+	}
 
+	logChan := make(chan string, 100)
+	
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		return m, nil
+	}
+
+	tunnelID := m.nextTunnelID
+	
 	t := tunnel{
-		id:         m.nextTunnelID,
+		id:         tunnelID,
 		host:       m.tempHost,
 		localPort:  m.tempLocal,
 		remotePort: m.tempRemote,
 		verbose:    m.tempVerbose,
 		cmd:        cmd,
 		active:     true,
-		logs:       []string{fmt.Sprintf("Tunnel started at %s", time.Now().Format("15:04:05"))},
+		logs:       []string{fmt.Sprintf("[%s] Tunnel started", time.Now().Format("15:04:05"))},
+		logChan:    logChan,
 	}
+
+	// Start goroutine to read logs
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			logChan <- scanner.Text()
+		}
+		close(logChan)
+	}()
 
 	m.tunnels = append(m.tunnels, t)
 	m.nextTunnelID++
 	m.view = viewMain
 	m.selectedTunnel = len(m.tunnels) - 1
 
-	return m, nil
+	return m, m.waitForLog(tunnelID)
+}
+
+func (m *model) waitForLog(tunnelID int) tea.Cmd {
+	return func() tea.Msg {
+		// Find the tunnel
+		for i := range m.tunnels {
+			if m.tunnels[i].id == tunnelID && m.tunnels[i].logChan != nil {
+				select {
+				case line, ok := <-m.tunnels[i].logChan:
+					if ok && line != "" {
+						return logMsg{tunnelID: tunnelID, line: fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), line)}
+					}
+				case <-time.After(100 * time.Millisecond):
+				}
+			}
+		}
+		return nil
+	}
 }
 
 func (m model) View() string {
