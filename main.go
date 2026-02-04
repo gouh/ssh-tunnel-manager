@@ -3,14 +3,17 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/moby/moby/pkg/namesgenerator"
 )
@@ -48,9 +51,23 @@ type tunnel struct {
 	logChan    chan string
 }
 
+// Implement list.Item interface for tunnel
+func (t tunnel) FilterValue() string { return t.tag }
+func (t tunnel) Title() string       { return t.tag }
+func (t tunnel) Description() string {
+	status := "●"
+	if t.active {
+		status = "🟢"
+	} else {
+		status = "🔴"
+	}
+	return fmt.Sprintf("%s %s  %s → %s", status, t.host, t.localPort, t.remotePort)
+}
+
 type model struct {
 	view          view
 	tunnels       []tunnel
+	tunnelList    list.Model
 	selectedPanel int // 0=tunnels list, 1=logs
 	selectedTunnel int
 	logScroll     int // Scroll position for logs
@@ -100,10 +117,46 @@ const banner = `
   ╰─────────────────────────────────────────────╯
 `
 
+// Custom list delegate for fancy rendering
+type tunnelDelegate struct{}
+
+func (d tunnelDelegate) Height() int                             { return 3 }
+func (d tunnelDelegate) Spacing() int                            { return 1 }
+func (d tunnelDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+func (d tunnelDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	t, ok := listItem.(tunnel)
+	if !ok {
+		return
+	}
+
+	var str string
+	if index == m.Index() {
+		str = selectedStyle.Render(fmt.Sprintf("▶ %s", t.Title())) + "\n"
+		str += selectedStyle.Render(fmt.Sprintf("  %s", t.Description()))
+	} else {
+		str = subtleStyle.Render(fmt.Sprintf("  %s", t.Title())) + "\n"
+		str += subtleStyle.Render(fmt.Sprintf("  %s", t.Description()))
+	}
+
+	fmt.Fprint(w, str)
+}
+
 func initialModel() model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#BD93F9"))
+	
+	// Initialize list
+	delegate := tunnelDelegate{}
+	tunnelList := list.New([]list.Item{}, delegate, 0, 0)
+	tunnelList.Title = "ACTIVE TUNNELS"
+	tunnelList.SetShowStatusBar(false)
+	tunnelList.SetFilteringEnabled(false)
+	tunnelList.SetShowHelp(false)
+	tunnelList.Styles.Title = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FF79C6")).
+		Bold(true).
+		Padding(0, 0, 1, 0)
 	
 	return model{
 		view:          viewMain,
@@ -111,6 +164,7 @@ func initialModel() model {
 		selectedPanel: 0,
 		nextTunnelID:  1,
 		spinner:       s,
+		tunnelList:    tunnelList,
 	}
 }
 
@@ -132,6 +186,8 @@ func waitForConnection() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	
 	switch msg := msg.(type) {
 	case connectingMsg:
 		if m.view == viewNewTunnel && m.step == stepConnecting {
@@ -141,7 +197,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		cmds = append(cmds, cmd)
 		
 	case logMsg:
 		// Update logs for the specific tunnel
@@ -157,11 +213,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.waitForLog(msg.tunnelID)
 			}
 		}
-		return m, nil
 		
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		
+		// Update list size
+		listWidth := 36
+		listHeight := msg.Height - 12
+		if listHeight < 5 {
+			listHeight = 5
+		}
+		m.tunnelList.SetSize(listWidth, listHeight)
 		
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -218,10 +281,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "up", "k":
 			if m.view == viewMain && m.selectedPanel == 0 {
-				if m.selectedTunnel > 0 {
-					m.selectedTunnel--
-					m.logScroll = 0 // Reset scroll when changing tunnel
-				}
+				// Let list handle navigation
 			} else if m.view == viewMain && m.selectedPanel == 1 {
 				// Scroll logs up
 				if m.logScroll > 0 {
@@ -235,10 +295,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "down", "j":
 			if m.view == viewMain && m.selectedPanel == 0 {
-				if m.selectedTunnel < len(m.tunnels)-1 {
-					m.selectedTunnel++
-					m.logScroll = 0 // Reset scroll when changing tunnel
-				}
+				// Let list handle navigation
 			} else if m.view == viewMain && m.selectedPanel == 1 {
 				// Scroll logs down
 				if len(m.tunnels) > 0 && m.selectedTunnel < len(m.tunnels) {
@@ -255,15 +312,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "d":
 			if m.view == viewMain && m.selectedPanel == 0 && len(m.tunnels) > 0 {
-				// Close selected tunnel
-				if m.tunnels[m.selectedTunnel].active && m.tunnels[m.selectedTunnel].cmd != nil {
-					m.tunnels[m.selectedTunnel].cmd.Process.Kill()
-					m.tunnels[m.selectedTunnel].active = false
-				}
-				// Remove from list
-				m.tunnels = append(m.tunnels[:m.selectedTunnel], m.tunnels[m.selectedTunnel+1:]...)
-				if m.selectedTunnel >= len(m.tunnels) && m.selectedTunnel > 0 {
-					m.selectedTunnel--
+				idx := m.tunnelList.Index()
+				if idx < len(m.tunnels) {
+					// Close selected tunnel
+					if m.tunnels[idx].active && m.tunnels[idx].cmd != nil {
+						m.tunnels[idx].cmd.Process.Kill()
+						m.tunnels[idx].active = false
+					}
+					// Remove from list
+					m.tunnels = append(m.tunnels[:idx], m.tunnels[idx+1:]...)
+					m.updateTunnelList()
+					if idx >= len(m.tunnels) && idx > 0 {
+						m.selectedTunnel = idx - 1
+					}
 				}
 			}
 
@@ -317,7 +378,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	return m, nil
+	
+	// Update list if in main view and left panel selected
+	if m.view == viewMain && m.selectedPanel == 0 {
+		var cmd tea.Cmd
+		m.tunnelList, cmd = m.tunnelList.Update(msg)
+		m.selectedTunnel = m.tunnelList.Index()
+		cmds = append(cmds, cmd)
+	}
+	
+	return m, tea.Batch(cmds...)
+}
+
+func (m *model) updateTunnelList() {
+	items := make([]list.Item, len(m.tunnels))
+	for i, t := range m.tunnels {
+		items[i] = t
+	}
+	m.tunnelList.SetItems(items)
 }
 
 func (m model) handleEnter() (tea.Model, tea.Cmd) {
@@ -422,6 +500,7 @@ func (m *model) finalizeTunnel() (tea.Model, tea.Cmd) {
 	m.nextTunnelID++
 	m.view = viewMain
 	m.selectedTunnel = len(m.tunnels) - 1
+	m.updateTunnelList()
 
 	return m, m.waitForLog(tunnelID)
 }
@@ -552,44 +631,13 @@ func (m model) renderSidebar(width, height int) string {
 		style = selectedPanelStyle.Width(width).Height(height)
 	}
 
-	sepWidth := width - 4
-	if sepWidth < 1 {
-		sepWidth = 1
-	}
-
-	content := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF79C6")).Render("ACTIVE TUNNELS") + "\n"
-	content += strings.Repeat("─", sepWidth) + "\n\n"
-
 	if len(m.tunnels) == 0 {
+		content := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF79C6")).Render("ACTIVE TUNNELS") + "\n\n"
 		content += subtleStyle.Render("No tunnels active\n\nPress 'n' to create one")
-	} else {
-		for i, t := range m.tunnels {
-			status := activeStyle.Render("●")
-			if !t.active {
-				status = inactiveStyle.Render("●")
-			}
-
-			line := fmt.Sprintf("%s [%s]", status, t.tag)
-			hostLine := fmt.Sprintf("  %s", t.host)
-			portLine := fmt.Sprintf("  %s → %s", t.localPort, t.remotePort)
-			
-			if i == m.selectedTunnel && m.selectedPanel == 0 {
-				content += selectedStyle.Render("▶ " + line) + "\n"
-				content += selectedStyle.Render(hostLine) + "\n"
-				content += selectedStyle.Render(portLine) + "\n"
-			} else {
-				content += "  " + line + "\n"
-				content += subtleStyle.Render(hostLine) + "\n"
-				content += subtleStyle.Render(portLine) + "\n"
-			}
-			
-			if i < len(m.tunnels)-1 {
-				content += "\n"
-			}
-		}
+		return style.Render(content)
 	}
 
-	return style.Render(content)
+	return style.Render(m.tunnelList.View())
 }
 
 func (m model) renderBody(width, height int) string {
@@ -598,76 +646,66 @@ func (m model) renderBody(width, height int) string {
 		style = selectedPanelStyle.Width(width).Height(height)
 	}
 
-	sepWidth := width - 4
-	if sepWidth < 1 {
-		sepWidth = 1
-	}
-
-	content := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF79C6")).Render("TUNNEL OUTPUT") + "\n"
-	content += strings.Repeat("─", sepWidth) + "\n\n"
-
 	if len(m.tunnels) == 0 || m.selectedTunnel >= len(m.tunnels) {
+		content := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF79C6")).Render("TUNNEL OUTPUT") + "\n\n"
 		content += subtleStyle.Render("No tunnel selected")
-	} else {
-		t := m.tunnels[m.selectedTunnel]
-		
-		// Tunnel info (takes ~8 lines)
-		infoLines := []string{
-			successStyle.Render(fmt.Sprintf("[%s]", t.tag)),
-			fmt.Sprintf("Host: %s", selectedStyle.Render(t.host)),
-			fmt.Sprintf("Local Port: %s", selectedStyle.Render(t.localPort)),
-			fmt.Sprintf("Remote Port: %s", selectedStyle.Render(t.remotePort)),
-			fmt.Sprintf("Verbose: %v", t.verbose),
-			fmt.Sprintf("Status: %s", func() string {
-				if t.active {
-					return activeStyle.Render("ACTIVE")
-				}
-				return inactiveStyle.Render("INACTIVE")
-			}()),
-			"",
-			lipgloss.NewStyle().Bold(true).Render("Logs:"),
-			strings.Repeat("─", sepWidth),
-		}
-		
-		for _, line := range infoLines {
-			content += line + "\n"
-		}
-		
-		// Calculate available space for logs
-		availableHeight := height - len(infoLines) - 4 // 4 for padding and borders
-		if availableHeight < 1 {
-			availableHeight = 1
-		}
-		
-		// Show logs with scroll
-		totalLogs := len(t.logs)
-		if totalLogs > 0 {
-			start := m.logScroll
-			end := start + availableHeight
-			
-			if end > totalLogs {
-				end = totalLogs
-			}
-			if start >= totalLogs {
-				start = totalLogs - 1
-				if start < 0 {
-					start = 0
-				}
-			}
-			
-			for i := start; i < end; i++ {
-				content += subtleStyle.Render(t.logs[i]) + "\n"
-			}
-			
-			// Show scroll indicator
-			if totalLogs > availableHeight {
-				scrollInfo := fmt.Sprintf(" [%d-%d of %d]", start+1, end, totalLogs)
-				content += "\n" + subtleStyle.Render(scrollInfo)
-			}
-		}
+		return style.Render(content)
 	}
 
-	return style.Render(content)
+	t := m.tunnels[m.selectedTunnel]
+	
+	// Create markdown content
+	markdown := fmt.Sprintf("# %s\n\n", t.tag)
+	markdown += fmt.Sprintf("**Host:** `%s`  \n", t.host)
+	markdown += fmt.Sprintf("**Local Port:** `%s`  \n", t.localPort)
+	markdown += fmt.Sprintf("**Remote Port:** `%s`  \n", t.remotePort)
+	markdown += fmt.Sprintf("**Verbose:** %v  \n", t.verbose)
+	
+	if t.active {
+		markdown += "**Status:** 🟢 ACTIVE\n\n"
+	} else {
+		markdown += "**Status:** 🔴 INACTIVE\n\n"
+	}
+	
+	markdown += "## Logs\n\n"
+	
+	if len(t.logs) > 0 {
+		// Show last logs that fit in the available space
+		availableLines := height - 15
+		if availableLines < 1 {
+			availableLines = 1
+		}
+		
+		start := len(t.logs) - availableLines
+		if start < 0 {
+			start = 0
+		}
+		
+		markdown += "```\n"
+		for i := start; i < len(t.logs); i++ {
+			markdown += t.logs[i] + "\n"
+		}
+		markdown += "```\n"
+	} else {
+		markdown += "_No logs yet..._\n"
+	}
+	
+	// Render with glamour
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(width-6),
+	)
+	
+	if err != nil {
+		return style.Render("Error rendering content")
+	}
+	
+	rendered, err := renderer.Render(markdown)
+	if err != nil {
+		return style.Render(markdown)
+	}
+	
+	return style.Render(rendered)
 }
 
 func (m model) renderFooter(width int) string {
