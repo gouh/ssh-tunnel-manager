@@ -465,7 +465,7 @@ func (m model) renderQuitConfirm() string {
 	}
 	
 	var content string
-	content += errorStyle.Render("⚠️  Quit Confirmation") + "\n\n"
+	content += errorStyle.Render("Quit Confirmation") + "\n\n"
 	
 	if activeTunnels > 0 {
 		content += fmt.Sprintf("You have %s active tunnel(s).\n", highlightStyle.Render(fmt.Sprintf("%d", activeTunnels)))
