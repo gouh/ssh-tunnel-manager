@@ -47,8 +47,9 @@ type tunnel struct {
 type model struct {
 	view          view
 	tunnels       []tunnel
-	selectedPanel int // 0=tunnels list, 1=new tunnel, 2=logs
+	selectedPanel int // 0=tunnels list, 1=logs
 	selectedTunnel int
+	logScroll     int // Scroll position for logs
 	
 	// New tunnel form
 	step         tunnelStep
@@ -170,6 +171,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.view == viewMain && m.selectedPanel == 0 {
 				if m.selectedTunnel > 0 {
 					m.selectedTunnel--
+					m.logScroll = 0 // Reset scroll when changing tunnel
+				}
+			} else if m.view == viewMain && m.selectedPanel == 1 {
+				// Scroll logs up
+				if m.logScroll > 0 {
+					m.logScroll--
 				}
 			} else if m.view == viewNewTunnel && m.step == stepHost {
 				if m.cursor > 0 {
@@ -181,6 +188,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.view == viewMain && m.selectedPanel == 0 {
 				if m.selectedTunnel < len(m.tunnels)-1 {
 					m.selectedTunnel++
+					m.logScroll = 0 // Reset scroll when changing tunnel
+				}
+			} else if m.view == viewMain && m.selectedPanel == 1 {
+				// Scroll logs down
+				if len(m.tunnels) > 0 && m.selectedTunnel < len(m.tunnels) {
+					maxScroll := len(m.tunnels[m.selectedTunnel].logs) - 1
+					if m.logScroll < maxScroll {
+						m.logScroll++
+					}
 				}
 			} else if m.view == viewNewTunnel && m.step == stepHost {
 				if m.cursor < len(m.hosts)-1 {
@@ -474,25 +490,59 @@ func (m model) renderBody(width, height int) string {
 	} else {
 		t := m.tunnels[m.selectedTunnel]
 		
-		// Tunnel info
-		content += successStyle.Render(fmt.Sprintf("[%s]", t.tag)) + "\n"
-		content += fmt.Sprintf("Host: %s\n", selectedStyle.Render(t.host))
-		content += fmt.Sprintf("Local Port: %s\n", selectedStyle.Render(t.localPort))
-		content += fmt.Sprintf("Remote Port: %s\n", selectedStyle.Render(t.remotePort))
-		content += fmt.Sprintf("Verbose: %v\n", t.verbose)
-		content += fmt.Sprintf("Status: %s\n\n", func() string {
-			if t.active {
-				return activeStyle.Render("ACTIVE")
+		// Tunnel info (takes ~8 lines)
+		infoLines := []string{
+			successStyle.Render(fmt.Sprintf("[%s]", t.tag)),
+			fmt.Sprintf("Host: %s", selectedStyle.Render(t.host)),
+			fmt.Sprintf("Local Port: %s", selectedStyle.Render(t.localPort)),
+			fmt.Sprintf("Remote Port: %s", selectedStyle.Render(t.remotePort)),
+			fmt.Sprintf("Verbose: %v", t.verbose),
+			fmt.Sprintf("Status: %s", func() string {
+				if t.active {
+					return activeStyle.Render("ACTIVE")
+				}
+				return inactiveStyle.Render("INACTIVE")
+			}()),
+			"",
+			lipgloss.NewStyle().Bold(true).Render("Logs:"),
+			strings.Repeat("─", sepWidth),
+		}
+		
+		for _, line := range infoLines {
+			content += line + "\n"
+		}
+		
+		// Calculate available space for logs
+		availableHeight := height - len(infoLines) - 4 // 4 for padding and borders
+		if availableHeight < 1 {
+			availableHeight = 1
+		}
+		
+		// Show logs with scroll
+		totalLogs := len(t.logs)
+		if totalLogs > 0 {
+			start := m.logScroll
+			end := start + availableHeight
+			
+			if end > totalLogs {
+				end = totalLogs
 			}
-			return inactiveStyle.Render("INACTIVE")
-		}())
-		
-		content += lipgloss.NewStyle().Bold(true).Render("Logs:") + "\n"
-		content += strings.Repeat("─", sepWidth) + "\n"
-		
-		// Show logs
-		for _, log := range t.logs {
-			content += subtleStyle.Render(log) + "\n"
+			if start >= totalLogs {
+				start = totalLogs - 1
+				if start < 0 {
+					start = 0
+				}
+			}
+			
+			for i := start; i < end; i++ {
+				content += subtleStyle.Render(t.logs[i]) + "\n"
+			}
+			
+			// Show scroll indicator
+			if totalLogs > availableHeight {
+				scrollInfo := fmt.Sprintf(" [%d-%d of %d]", start+1, end, totalLogs)
+				content += "\n" + subtleStyle.Render(scrollInfo)
+			}
 		}
 	}
 
@@ -501,8 +551,14 @@ func (m model) renderBody(width, height int) string {
 
 func (m model) renderFooter(width int) string {
 	leftHelp := "Tab: switch panel"
-	centerHelp := "n: new tunnel • d: delete • ↑/↓: navigate"
+	centerHelp := ""
 	rightHelp := "q: quit"
+	
+	if m.selectedPanel == 0 {
+		centerHelp = "n: new tunnel • d: delete • ↑/↓: navigate"
+	} else if m.selectedPanel == 1 {
+		centerHelp = "↑/↓: scroll logs"
+	}
 	
 	leftStyle := subtleStyle.Width(width / 3).Align(lipgloss.Left)
 	centerStyle := subtleStyle.Width(width / 3).Align(lipgloss.Center)
