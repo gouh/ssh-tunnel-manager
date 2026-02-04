@@ -162,6 +162,10 @@ MIT License - see LICENSE file for details
 
 ## Author
 
+**Hugo Hernández Valdez**
+- Email: hugohv10@gmail.com
+- Website: [hanhgouh.me](https://hanhgouh.me)
+
 Created with ❤️ using Go and Bubbletea
 
 ## Acknowledgments
