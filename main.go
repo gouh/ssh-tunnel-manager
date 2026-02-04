@@ -512,20 +512,25 @@ func (m *model) finalizeTunnel() (tea.Model, tea.Cmd) {
 
 func (m *model) waitForLog(tunnelID int) tea.Cmd {
 	return func() tea.Msg {
+		time.Sleep(200 * time.Millisecond)
+		
 		// Find the tunnel
 		for i := range m.tunnels {
 			if m.tunnels[i].id == tunnelID && m.tunnels[i].logChan != nil {
 				select {
 				case line, ok := <-m.tunnels[i].logChan:
-					if ok && line != "" {
+					if !ok {
+						// Channel closed
+						return nil
+					}
+					if line != "" {
 						return logMsg{tunnelID: tunnelID, line: fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), line)}
 					}
-					// Channel closed, stop listening
-					return nil
-				case <-time.After(100 * time.Millisecond):
-					// Timeout, send empty message to continue listening
-					return logMsg{tunnelID: tunnelID, line: ""}
+				default:
+					// No data available, continue
 				}
+				// Continue listening
+				return logMsg{tunnelID: tunnelID, line: ""}
 			}
 		}
 		return nil
