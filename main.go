@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/moby/moby/pkg/namesgenerator"
 )
 
 type view int
@@ -99,15 +100,6 @@ func initialModel() model {
 		selectedPanel: 0,
 		nextTunnelID:  1,
 	}
-}
-
-var adjectives = []string{"happy", "brave", "clever", "gentle", "bright", "swift", "calm", "bold", "wise", "kind"}
-var nouns = []string{"panda", "tiger", "eagle", "dolphin", "falcon", "wolf", "bear", "fox", "hawk", "lion"}
-
-func generateRandomTag() string {
-	adj := adjectives[time.Now().UnixNano()%int64(len(adjectives))]
-	noun := nouns[(time.Now().UnixNano()/1000)%int64(len(nouns))]
-	return fmt.Sprintf("%s-%s", adj, noun)
 }
 
 type logMsg struct {
@@ -269,7 +261,7 @@ func (m model) handleEnter() (tea.Model, tea.Cmd) {
 		
 		case stepTag:
 			if m.input == "" {
-				m.tempTag = generateRandomTag()
+				m.tempTag = namesgenerator.GetRandomName(0)
 			} else {
 				m.tempTag = m.input
 			}
