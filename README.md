@@ -95,11 +95,12 @@ Requirements: Go 1.21 or higher
 git clone https://github.com/gouh/ssh-tunnel-manager.git
 cd ssh-tunnel-manager
 
-# Build the binary
+# Build binaries for all platforms (Linux, macOS Intel, macOS Apple Silicon)
 make build
 
-# Install to system (optional)
-sudo cp ssh-tunnel-manager /usr/local/bin/
+# Binaries will be in ./build/ directory
+# Install to system (optional, Linux example)
+sudo cp build/ssh-tunnel-manager-linux-amd64 /usr/local/bin/ssh-tunnel-manager
 ```
 
 ## Development
