@@ -288,6 +288,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		default:
+			if m.view == viewQuitConfirm {
+				// Any key except Y cancels
+				m.view = viewMain
+				return m, nil
+			}
+			
 			if m.view == viewNewTunnel && (m.step == stepRemotePort || m.step == stepLocalPort) {
 				if len(msg.String()) == 1 && msg.String()[0] >= '0' && msg.String()[0] <= '9' {
 					m.input += msg.String()
@@ -474,19 +480,13 @@ func (m model) renderQuitConfirm() string {
 		content += "Are you sure you want to quit?\n\n"
 	}
 	
-	content += successStyle.Render("Y") + subtleStyle.Render(" - Yes, quit\n")
-	content += errorStyle.Render("N") + subtleStyle.Render(" - No, go back\n")
-	content += subtleStyle.Render("Esc - Cancel")
+	content += successStyle.Render("Y") + subtleStyle.Render(" - Yes, quit   ") + errorStyle.Render("Any key") + subtleStyle.Render(" - Cancel")
 	
-	// Use same style as new tunnel form
-	modal := panelStyle.Width(60).Render(content)
+	// Center content and use same style as new tunnel form
+	centeredContent := lipgloss.NewStyle().Width(60).Align(lipgloss.Center).Render(content)
+	modal := panelStyle.Width(60).Render(centeredContent)
 	
 	// Center vertically and horizontally
-	verticalPadding := (m.height - 12) / 2
-	if verticalPadding < 0 {
-		verticalPadding = 0
-	}
-	
 	centered := lipgloss.Place(m.width, m.height-4, lipgloss.Center, lipgloss.Center, modal)
 	
 	return centered
