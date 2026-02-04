@@ -497,13 +497,18 @@ func (m model) renderTopBar() string {
 	}
 	
 	title := "SSH TUNNEL MANAGER"
-	padding := (m.width - len(title) - 4) / 2
+	version := "v" + Version
+	versionStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6272A4"))
+	
+	titleWithVersion := title + " " + versionStyle.Render(version)
+	titleLen := len(title) + len(version) + 1
+	padding := (m.width - titleLen - 4) / 2
 	if padding < 0 {
 		padding = 0
 	}
 	
 	topBorder := "╭" + strings.Repeat("─", m.width-2) + "╮"
-	titleLine := "│" + strings.Repeat(" ", padding) + title + strings.Repeat(" ", m.width-len(title)-padding-2) + "│"
+	titleLine := "│" + strings.Repeat(" ", padding) + titleWithVersion + strings.Repeat(" ", m.width-titleLen-padding-2) + "│"
 	bottomBorder := "╰" + strings.Repeat("─", m.width-2) + "╯"
 	
 	return titleStyle.Render(topBorder + "\n" + titleLine + "\n" + bottomBorder)

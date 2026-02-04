@@ -96,10 +96,34 @@ git clone https://github.com/gouh/ssh-tunnel-manager.git
 cd ssh-tunnel-manager
 
 # Build the binary
-go build -o ssh-tunnel-manager
+make build
 
 # Install to system (optional)
 sudo cp ssh-tunnel-manager /usr/local/bin/
+```
+
+## Development
+
+### Version Management
+
+This project uses semantic versioning. To create a new version:
+
+```bash
+make bump-version
+```
+
+This will:
+1. Prompt you for the new version number
+2. Ask you to enter the changes (one per line)
+3. Update `version.go` with the new version
+4. Update `CHANGELOG.md` with the changes
+5. Create a git commit
+6. Create a git tag
+
+After the bump, push the changes:
+
+```bash
+git push && git push --tags
 ```
 
 ## Usage
