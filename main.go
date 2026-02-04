@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/moby/moby/pkg/namesgenerator"
@@ -66,7 +66,7 @@ type model struct {
 	tempTag      string
 	tempVerbose  bool
 	err          error
-	progress     progress.Model
+	spinner      spinner.Model
 	
 	nextTunnelID int
 	width        int
@@ -101,15 +101,16 @@ const banner = `
 `
 
 func initialModel() model {
-	prog := progress.New(progress.WithDefaultGradient())
-	prog.Width = 40
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#BD93F9"))
 	
 	return model{
 		view:          viewMain,
 		hosts:         getSSHHosts(),
 		selectedPanel: 0,
 		nextTunnelID:  1,
-		progress:      prog,
+		spinner:       s,
 	}
 }
 
@@ -118,29 +119,29 @@ type logMsg struct {
 	line     string
 }
 
-type progressMsg float64
+type connectingMsg struct{}
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return m.spinner.Tick
 }
 
-func tickProgress() tea.Cmd {
-	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
-		return progressMsg(0.1)
+func waitForConnection() tea.Cmd {
+	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+		return connectingMsg{}
 	})
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case progressMsg:
+	case connectingMsg:
 		if m.view == viewNewTunnel && m.step == stepConnecting {
-			cmd := m.progress.IncrPercent(float64(msg))
-			if m.progress.Percent() >= 1.0 {
-				// Connection complete
-				return m.finalizeTunnel()
-			}
-			return m, tea.Batch(cmd, tickProgress())
+			return m.finalizeTunnel()
 		}
+	
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 		
 	case logMsg:
 		// Update logs for the specific tunnel
@@ -270,8 +271,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.view == viewNewTunnel && m.step == stepVerbose {
 				m.tempVerbose = true
 				m.step = stepConnecting
-				m.progress.SetPercent(0)
-				return m, tickProgress()
+				return m, tea.Batch(m.spinner.Tick, waitForConnection())
 			} else if m.view == viewQuitConfirm {
 				// Confirm quit
 				for i := range m.tunnels {
@@ -366,8 +366,7 @@ func (m model) handleEnter() (tea.Model, tea.Cmd) {
 		case stepVerbose:
 			m.tempVerbose = false
 			m.step = stepConnecting
-			m.progress.SetPercent(0)
-			return m, tickProgress()
+			return m, tea.Batch(m.spinner.Tick, waitForConnection())
 		}
 	}
 	return m, nil
@@ -737,11 +736,18 @@ func (m model) renderNewTunnelForm() string {
 	
 	case stepConnecting:
 		content = highlightStyle.Render("Connecting to tunnel...") + "\n\n"
-		content += m.progress.View() + "\n\n"
+		content += m.spinner.View() + " " + subtleStyle.Render("Please wait...") + "\n\n"
 		content += subtleStyle.Render(fmt.Sprintf("Host: %s\nPorts: %s → %s", m.tempHost, m.tempLocal, m.tempRemote))
 	}
 
-	return panelStyle.Width(60).Render(content)
+	// Center content
+	centeredContent := lipgloss.NewStyle().Width(60).Align(lipgloss.Center).Render(content)
+	modal := panelStyle.Width(60).Render(centeredContent)
+	
+	// Center the form on screen
+	centered := lipgloss.Place(m.width, m.height-4, lipgloss.Center, lipgloss.Center, modal)
+	
+	return centered
 }
 
 func getSSHHosts() []string {
