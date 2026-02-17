@@ -8,17 +8,19 @@ A beautiful terminal UI for managing multiple SSH tunnels simultaneously.
 ## Features
 
 ✨ **Multiple Tunnels** - Create and manage multiple SSH tunnels at once  
-🎨 **Beautiful UI** - Modern Dracula-themed interface with Bubbletea  
+🎨 **One Dark Theme** - Modern purple-themed interface with Bubbletea  
 📊 **Real-time Logs** - View SSH connection logs in real-time  
 🏷️ **Auto-naming** - Docker-style automatic tunnel naming  
 ⌨️ **Keyboard Navigation** - Efficient keyboard-driven interface  
 🔄 **Live Status** - See active/inactive tunnel status at a glance  
+🖱️ **Mouse Support** - Click to select tunnels and panels  
+✅ **Confirmation Modals** - Confirm before deleting tunnels  
 
 ## Screenshots
 
 ```
   ╭─────────────────────────────────────────────╮
-  │           SSH TUNNEL MANAGER                │
+  │           SSH TUNNEL MANAGER  v1.0.0        │
   ╰─────────────────────────────────────────────╯
 
 ╭─────────────────────────────────╮  ╭──────────────────────────────────╮
@@ -28,14 +30,14 @@ A beautiful terminal UI for managing multiple SSH tunnels simultaneously.
 │ ▶ ● [brave-tesla]              │  │ [brave-tesla]                    │
 │     server.example.com          │  │ Host: server.example.com         │
 │     8080 → 80                   │  │ Local Port: 8080                 │
-│                                 │  │ Remote Port: 80                  │
+│                                 │  │ Remote Port: 80                 │
 │   ● [happy-curie]              │  │ Status: ACTIVE                   │
 │     db.example.com              │  │                                  │
 │     5432 → 5432                 │  │ Logs:                            │
 │                                 │  │ ──────────────────────────────── │
 ╰─────────────────────────────────╯  │ [15:04:05] Tunnel started        │
-                                      │ [15:04:06] Connection established│
-Tab: switch panel • n: new • d: delete  ╰──────────────────────────────────╯
+                                       │ [15:04:06] Connection established│
+Tab: switch • n: new • d: delete • q: quit  ╰──────────────────────────────────╯
 ```
 
 ## Installation
@@ -140,22 +142,28 @@ ssh-tunnel-manager
 #### Main View
 - `Tab` - Switch between panels (Tunnels / Logs)
 - `n` - Create new tunnel
-- `d` - Delete selected tunnel
+- `d` - Delete selected tunnel (with confirmation modal)
 - `↑/↓` or `j/k` - Navigate tunnel list
 - `q` or `Ctrl+C` - Quit (with confirmation)
 
 #### Creating a Tunnel
 1. Press `n` to start
 2. Select host from list or press `m` for manual entry
-3. Enter remote port
-4. Enter local port
-5. Enter tag (or press Enter for auto-generated name)
-6. Choose verbose mode (y/n)
-7. Wait for connection
+3. If host has multiple IPs, select which one to use
+4. Enter remote port
+5. Enter local port
+6. Enter tag (or press Enter for auto-generated name)
+7. Choose verbose mode (y/n)
+8. Wait for connection
 
 #### Logs Panel
 - `↑/↓` - Scroll through logs
 - View real-time SSH connection output
+
+#### Mouse Support
+- Click on tunnels to select them
+- Click on panels to switch focus
+- Use scroll wheel to navigate long lists
 
 ## Configuration
 
