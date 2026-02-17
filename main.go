@@ -325,6 +325,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, tea.Quit
 			}
+			// If in help view, just close it
+			if m.view == viewHelp {
+				m.view = viewMain
+				return m, nil
+			}
 			// Show quit confirmation
 			m.view = viewQuitConfirm
 			return m, nil
@@ -357,7 +362,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.input = ""
 			}
 
-		case "esc":
+		case "esc", "escape":
 			if m.view == viewNewTunnel && m.step == stepHostIP {
 				m.step = stepHost
 				m.hostIPs = nil
@@ -711,7 +716,7 @@ func (m model) renderHelp() string {
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#5C6370"))
 
-	content.WriteString(titleStyle.Render("Keyboard Shortcuts") + "\n\n")
+	content.WriteString("  " + titleStyle.Render("Keyboard Shortcuts") + "\n\n")
 
 	shortcuts := []struct {
 		key  string
@@ -728,29 +733,29 @@ func (m model) renderHelp() string {
 	}
 
 	for _, s := range shortcuts {
-		content.WriteString(keyStyle.Render(fmt.Sprintf("%-15s", s.key+": ")))
+		content.WriteString("  " + keyStyle.Render(fmt.Sprintf("%-15s", s.key+": ")))
 		content.WriteString(descStyle.Render(s.desc) + "\n")
 	}
 
-	content.WriteString("\n" + titleStyle.Render("Tips") + "\n\n")
-	content.WriteString(descStyle.Render("• Click on tunnels to select them\n"))
-	content.WriteString(descStyle.Render("• Use scroll wheel to navigate\n"))
-	content.WriteString(descStyle.Render("• Press 'esc' to close this help\n"))
+	content.WriteString("\n  " + titleStyle.Render("Tips") + "\n\n")
+	content.WriteString("  " + descStyle.Render("• Click on tunnels to select them") + "\n")
+	content.WriteString("  " + descStyle.Render("• Use scroll wheel to navigate") + "\n")
+	content.WriteString("  " + descStyle.Render("• Press 'esc' to close this help") + "\n")
 
-	content.WriteString("\n" + descStyle.Render("Version: "+Version))
-
-	helpWidth := 50
-	if m.width < helpWidth+10 {
-		helpWidth = m.width - 10
-	}
+	content.WriteString("\n  " + descStyle.Render("Version: "+Version))
 
 	helpStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color("#1E2127")).
 		Foreground(lipgloss.Color("#ABB2BF")).
-		Padding(1, 2).
-		Width(helpWidth)
+		Padding(1, 2)
 
-	return helpStyle.Render(content.String())
+	// Create panel with content
+	modal := helpStyle.Render(content.String())
+
+	// Center the panel on screen
+	centered := lipgloss.Place(m.width, m.height-4, lipgloss.Center, lipgloss.Center, modal)
+
+	return centered
 }
 
 func (m model) renderQuitConfirm() string {
