@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-02-17
+
+### feat
+
+- - Add MIT license
+- - Improve README screenshot
+- - Extract bump-version to dedicated script (mejora en validación semver, selección de tipo de cambio, preview)
+- - Enhance install script (ASCII banner, spinner animado, colores)
+- - Simplify install script banner
+- - Add SSH TUNNEL MANAGER ASCII banner
+
+
 ## [1.1.0] - 2026-02-17
 
 ### Added
