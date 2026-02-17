@@ -119,6 +119,11 @@ type model struct {
 	width        int
 	height       int
 	program      *tea.Program
+
+	toast         string
+	toastType     string
+	toastTimer    time.Time
+	statusMessage string
 }
 
 const banner = `
@@ -175,6 +180,7 @@ func initialModel() model {
 		nextTunnelID:  1,
 		spinner:       s,
 		tunnelList:    tunnelList,
+		statusMessage: "Ready • Press ? for help",
 	}
 }
 
@@ -303,6 +309,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle other commands
 		switch msg.String() {
+		case "?":
+			if m.view == viewMain {
+				m.view = viewHelp
+				return m, nil
+			}
+
 		case "ctrl+c", "q":
 			if m.view == viewQuitConfirm {
 				// Already in quit confirm, force quit
@@ -354,6 +366,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else if m.view == viewQuitConfirm {
 				m.view = viewMain
 			} else if m.view == viewDeleteConfirm {
+				m.view = viewMain
+			} else if m.view == viewHelp {
 				m.view = viewMain
 			}
 
@@ -606,6 +620,10 @@ func (m model) View() string {
 	// Always render main view first
 	mainContent := topBar + "\n" + m.renderMainView()
 
+	// Render status bar
+	statusBar := m.renderStatusBar()
+	mainContent = mainContent + "\n" + statusBar
+
 	// Overlay modals on top
 	if m.view == viewQuitConfirm {
 		return m.renderModalOverlay(mainContent, m.renderQuitConfirm())
@@ -617,6 +635,10 @@ func (m model) View() string {
 
 	if m.view == viewNewTunnel {
 		return m.renderModalOverlay(mainContent, m.renderNewTunnelForm())
+	}
+
+	if m.view == viewHelp {
+		return m.renderModalOverlay(mainContent, m.renderHelp())
 	}
 
 	return mainContent
@@ -659,6 +681,76 @@ func (m model) renderModalOverlay(background, modalContent string) string {
 	}
 
 	return result.String()
+}
+
+func (m model) renderStatusBar() string {
+	if m.width < 10 || m.statusMessage == "" {
+		return ""
+	}
+
+	statusStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#ABB2BF")).
+		Background(lipgloss.Color("#282C34")).
+		Padding(0, 1).
+		Width(m.width - 2)
+
+	return statusStyle.Render(m.statusMessage)
+}
+
+func (m model) renderHelp() string {
+	var content strings.Builder
+
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#61AFEF")).
+		Bold(true).
+		Padding(0, 0, 1, 0)
+
+	keyStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#D19A66"))
+
+	descStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#5C6370"))
+
+	content.WriteString(titleStyle.Render("Keyboard Shortcuts") + "\n\n")
+
+	shortcuts := []struct {
+		key  string
+		desc string
+	}{
+		{"Tab", "Switch between panels"},
+		{"n", "Create new tunnel"},
+		{"d", "Delete selected tunnel"},
+		{"↑/↓ or j/k", "Navigate tunnel list"},
+		{"enter", "Select / Confirm"},
+		{"esc", "Cancel / Go back"},
+		{"q or ctrl+c", "Quit (with confirmation)"},
+		{"?", "Show this help"},
+	}
+
+	for _, s := range shortcuts {
+		content.WriteString(keyStyle.Render(fmt.Sprintf("%-15s", s.key+": ")))
+		content.WriteString(descStyle.Render(s.desc) + "\n")
+	}
+
+	content.WriteString("\n" + titleStyle.Render("Tips") + "\n\n")
+	content.WriteString(descStyle.Render("• Click on tunnels to select them\n"))
+	content.WriteString(descStyle.Render("• Use scroll wheel to navigate\n"))
+	content.WriteString(descStyle.Render("• Press 'esc' to close this help\n"))
+
+	content.WriteString("\n" + descStyle.Render("Version: "+Version))
+
+	helpWidth := 50
+	if m.width < helpWidth+10 {
+		helpWidth = m.width - 10
+	}
+
+	helpStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("#1E2127")).
+		Foreground(lipgloss.Color("#ABB2BF")).
+		Padding(1, 2).
+		Width(helpWidth)
+
+	return helpStyle.Render(content.String())
 }
 
 func (m model) renderQuitConfirm() string {
@@ -850,14 +942,16 @@ func (m model) renderBody(width, height int) string {
 }
 
 func (m model) renderFooter(width int) string {
-	leftHelp := "Tab: switch panel"
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#D19A66"))
+
+	leftHelp := keyStyle.Render("Tab") + ": switch"
 	centerHelp := ""
-	rightHelp := "q: quit"
+	rightHelp := keyStyle.Render("?") + ": help"
 
 	if m.selectedPanel == 0 {
-		centerHelp = "n: new tunnel • d: delete • ↑/↓: navigate"
+		centerHelp = keyStyle.Render("n") + ": new  " + keyStyle.Render("d") + ": delete  " + keyStyle.Render("↑/↓") + ": nav"
 	} else if m.selectedPanel == 1 {
-		centerHelp = "↑/↓: scroll logs"
+		centerHelp = keyStyle.Render("↑/↓") + ": scroll"
 	}
 
 	leftStyle := subtleStyle.Width(width / 3).Align(lipgloss.Left)
