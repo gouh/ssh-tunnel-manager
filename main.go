@@ -121,27 +121,6 @@ type model struct {
 	program      *tea.Program
 }
 
-var (
-	titleStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#61AFEF"))
-	errorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#E06C75")).Bold(true)
-	successStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#98C379")).Bold(true)
-	selectedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#E5C07B")).Bold(true)
-	subtleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#5C6370"))
-	activeStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#98C379"))
-	inactiveStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#E06C75"))
-	highlightStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#D19A66"))
-
-	panelStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#5C6370")).
-			Padding(1, 2)
-
-	selectedPanelStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("#C678DD")).
-				Padding(1, 2)
-)
-
 const banner = `
   ╭─────────────────────────────────────────────╮
   │           SSH TUNNEL MANAGER                │
