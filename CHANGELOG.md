@@ -2,7 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.0] - 2026-02-16
+## [1.1.0] - 2026-02-17
+
+### Added
+
+- **Help Overlay**: Press ? to see all keyboard shortcuts in a clean overlay
+- **Visible Shortcuts**: Keyboard shortcuts now shown in the footer for quick reference
+- **Search Functionality**: Find tunnels quickly with the new search feature
+- **Toast Notifications**: Better feedback when creating or deleting tunnels
+
+### Fixed
+
+- Help view now closes properly with Escape key
+- Improved help panel rendering and centering
 
 ### Added
 
