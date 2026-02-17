@@ -53,14 +53,13 @@ detect_os_arch() {
 print_banner() {
     clear
     echo -e "${MAGENTA}"
-    echo '  ███████╗██╗  ██╗ █████╗ ██████╗  ██████╗  █████╗ ██████╗  ██████╗ ███████╗██████╗ '
-    echo '  ██╔════╝██║  ██║██╔══██╗██╔══██╗██╔═══██╗██╔══██╗██╔══██╗██╔═══██╗██╔════╝██╔══██╗'
-    echo '  ███████╗███████║███████║██║  ██║██║   ██║███████║██████╔╝██║   ██║█████╗  ██████╔╝'
-    echo '  ╚════██║██╔══██║██╔══██║██║  ██║██║   ██║██╔══██║██╔══██╗██║   ██║██╔══╝  ██╔══██╗'
-    echo '  ███████║██║  ██║██║  ██║██████╔╝╚██████╔╝██║  ██║██║  ██║╚██████╔╝██║     ██║  ██║'
-    echo '  ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚═╝  ╚═╝'
+    echo '   SSSSS   H   H  SSSSS  TTTTT   U   U  N   N  N   N  E   L   L     M   M  A   A  N   N  A   A  G   G  E   E  R   R'
+    echo '  S       H   H S       T     U   U  N N N  N N N  E   L   L     M M M  A A A  N N N  A A A  G   G  E   E  R   R'
+    echo '  SSSSS   HHHHH  SSSSS   T     U   U  N  NN  N  NN  EEE L   L     M   M  A   A  N  NN  A   A  GGG  EEE  RRR'
+    echo '      S   H   H      S   T     U   U  N   N  N   N  E   L   L     M   M  A   A  N   N  A   A  G   G  E   E  R   R'
+    echo '  SSSSS   H   H  SSSSS   T      UUU   N   N  N   N  E   LLLLL     M   M  A   A  N   N  A   A  G   G  E   E  R   R'
     echo -e "${NC}"
-    echo -e "${CYAN}                         T U N N E L   M A N A G E R${NC}"
+    echo -e "${CYAN}                              T U N N E L   M A N A G E R${NC}"
     echo ""
 }
 
