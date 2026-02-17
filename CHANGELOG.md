@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-02-16
+
+### Added
+
+- **New One Dark theme**: Interface with blue, red, green, and purple colors
+- **Confirmation modals**: Now when deleting a tunnel, a confirmation modal appears
+- **IP selection**: When a host has multiple IPs, you can choose which one to use
+- **Mouse support**: Click on panels and tunnels to select them
+- **Scroll for long lists**: Smooth navigation when there are many hosts
+
 ## [0.1.3] - 2026-02-04
 
 ### Added
