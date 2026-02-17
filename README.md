@@ -19,25 +19,26 @@ A beautiful terminal UI for managing multiple SSH tunnels simultaneously.
 ## Screenshots
 
 ```
-  ╭─────────────────────────────────────────────╮
-  │           SSH TUNNEL MANAGER  v1.0.0        │
-  ╰─────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────╮
+│                      SSH TUNNEL MANAGER v1.1.0                   │
+╰──────────────────────────────────────────────────────────────────╯
 
-╭─────────────────────────────────╮  ╭──────────────────────────────────╮
-│ ACTIVE TUNNELS                  │  │ TUNNEL OUTPUT                    │
-│ ─────────────────────────────── │  │ ──────────────────────────────── │
-│                                 │  │                                  │
-│ ▶ ● [brave-tesla]              │  │ [brave-tesla]                    │
-│     server.example.com          │  │ Host: server.example.com         │
-│     8080 → 80                   │  │ Local Port: 8080                 │
-│                                 │  │ Remote Port: 80                 │
-│   ● [happy-curie]              │  │ Status: ACTIVE                   │
-│     db.example.com              │  │                                  │
-│     5432 → 5432                 │  │ Logs:                            │
-│                                 │  │ ──────────────────────────────── │
-╰─────────────────────────────────╯  │ [15:04:05] Tunnel started        │
-                                       │ [15:04:06] Connection established│
-Tab: switch • n: new • d: delete • q: quit  ╰──────────────────────────────────╯
+╭────────────────────────────╮  ╭──────────────────────────────────╮
+│      ACTIVE TUNNELS        │  │         TUNNEL OUTPUT            │
+│ ──────────────────────────  │  │ ───────────────────────────────── │
+│                            │  │                                   │
+│  ● [brave-tesla]           │  │  [brave-tesla]                    │
+│      server.example.com    │  │  Host: server.example.com        │
+│      8080 → 80             │  │  Local Port: 8080                 │
+│      ● ACTIVE              │  │  Remote Port: 80                  │
+│                            │  │  Status: ● ACTIVE                 │
+│  ● [happy-curie]           │  │                                   │
+│      db.example.com        │  │  Logs:                            │
+│      5432 → 5432           │  │  ─────────────────────────────    │
+│      ○ CONNECTING          │  │  [15:04:05] Tunnel started        │
+│                            │  │  [15:04:06] Connection established │
+╰────────────────────────────╯  ╰──────────────────────────────────╯
+          ↑↓ navigate • n: new • d: delete • q: quit
 ```
 
 ## Installation
@@ -233,7 +234,7 @@ MIT License - see LICENSE file for details
 
 **Hugo Hernández Valdez**
 - Email: hugohv10@gmail.com
-- Website: [hanhgouh.me](https://hanhgouh.me)
+- Website: [hangouh.me](https://hangouh.me)
 
 Created with ❤️ using Go and Bubbletea
 
